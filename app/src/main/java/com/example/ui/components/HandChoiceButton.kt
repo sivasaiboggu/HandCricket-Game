@@ -1,10 +1,13 @@
 package com.example.ui.components
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
@@ -19,6 +22,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 
 @Composable
 fun HandChoiceButton(
@@ -32,6 +36,13 @@ fun HandChoiceButton(
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
         label = "ButtonPress"
     )
+
+    LaunchedEffect(isPressed) {
+        if (isPressed) {
+            delay(150)
+            isPressed = false
+        }
+    }
 
     // Assign specific theme colors based on runs potential
     val buttonColors = when (number) {
@@ -63,32 +74,43 @@ fun HandChoiceButton(
         else -> ButtonColorToken(
             mainGrad = listOf(Color(0xFF6B21A8), Color(0xFFA855F7)), // Cosmic Purple
             accent = Color(0xFFE9D5FF),
-            runTitle = "GLORIOUS SIX"
+            runTitle = "Glorious Six"
         )
     }
 
     Card(
         modifier = modifier
-            .padding(4.dp)
+            .padding(5.dp)
             .scale(scale)
             .testTag("run_choice_button_$number")
-            .clip(CardDefaults.shape)
+            .clip(RoundedCornerShape(18.dp))
             .clickable {
                 isPressed = true
                 onClick()
-                // Auto-reset pulse
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                    isPressed = false
-                }, 150)
             },
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(
+            1.5.dp,
+            Brush.verticalGradient(
+                listOf(buttonColors.accent, buttonColors.accent.copy(alpha = 0.2f))
+            )
+        ),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    Brush.verticalGradient(buttonColors.mainGrad)
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF1E293B).copy(alpha = 0.85f), Color(0xFF0F172A).copy(alpha = 0.95f))
+                    )
+                )
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(buttonColors.accent.copy(alpha = 0.12f), Color.Transparent),
+                        radius = 120f
+                    )
                 )
                 .padding(8.dp),
             contentAlignment = Alignment.Center
@@ -100,14 +122,14 @@ fun HandChoiceButton(
                 // Large styled Display Number
                 Text(
                     text = number.toString(),
-                    fontSize = 34.sp,
+                    fontSize = 32.sp,
                     fontWeight = FontWeight.Black,
-                    color = Color.White
+                    color = buttonColors.accent
                 )
 
                 Spacer(modifier = Modifier.height(2.dp))
 
-                // Mini Ball rating indicators
+                // Mini Ball rating indicators (Stars)
                 Row(
                     horizontalArrangement = Arrangement.Center,
                     verticalAlignment = Alignment.CenterVertically,
@@ -127,10 +149,11 @@ fun HandChoiceButton(
 
                 // Run type title label
                 Text(
-                    text = buttonColors.runTitle,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.85f)
+                    text = buttonColors.runTitle.uppercase(),
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White.copy(alpha = 0.6f),
+                    letterSpacing = 0.5.sp
                 )
             }
         }

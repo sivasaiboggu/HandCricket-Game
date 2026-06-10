@@ -182,7 +182,7 @@ fun HandSignAnimator(
                             rotate(degrees = activeRotation, pivot = Offset(size.width * 0.4f, size.height * 0.6f)) {
                                 drawHandGesture(
                                     centerX = size.width / 2f,
-                                    centerY = (size.height / 2f) + activeYOffset,
+                                    centerY = (size.height * 0.58f) + activeYOffset,
                                     scale = currentScale,
                                     fingersCount = if (isShaking) 0 else playerChoice,
                                     handColor = ImmersiveLime,
@@ -270,7 +270,7 @@ fun HandSignAnimator(
                             rotate(degrees = activeRotation, pivot = Offset(size.width * 0.6f, size.height * 0.6f)) {
                                 drawHandGesture(
                                     centerX = size.width / 2f,
-                                    centerY = (size.height / 2f) + activeYOffset,
+                                    centerY = (size.height * 0.58f) + activeYOffset,
                                     scale = currentScale,
                                     fingersCount = if (isShaking) 0 else aiChoice,
                                     handColor = Color(0xFF81D4FA),
@@ -336,10 +336,10 @@ private fun DrawScope.drawHandGesture(
     handColor: Color,
     isLeftHand: Boolean
 ) {
-    val basePalmWidth = 60f * scale
-    val basePalmHeight = 70f * scale
-    val fingerThickness = 12f * scale
-    val baseFingerLength = 65f * scale
+    val basePalmWidth = 46f * scale
+    val basePalmHeight = 56f * scale
+    val fingerThickness = 9f * scale
+    val baseFingerLength = 48f * scale
 
     // 1. Draw Wrist/Forearm base (slanted rectangle)
     val wristPath = androidx.compose.ui.graphics.Path().apply {
@@ -401,9 +401,9 @@ private fun DrawScope.drawHandGesture(
         // Count how many normal fingers to extend (up to 4)
         val normalFingersToExtend = if (fingersCount >= 5) 4 else (fingersCount - 1).coerceAtLeast(0)
         
-        // Always draw the index finger if selection >= 1
-        val indexExtended = fingersCount >= 1
-        
+        // Always draw the index finger if selection is 1..5
+        val indexExtended = fingersCount in 1..5
+
         // Draw Index Finger (i=0)
         if (indexExtended) {
             drawFinger(
@@ -419,7 +419,7 @@ private fun DrawScope.drawHandGesture(
         }
 
         // Draw Middle Finger (i=1)
-        if (fingersCount >= 2) {
+        if (fingersCount in 2..5) {
             drawFinger(
                 startX = fingerStartX + fingerSpacing,
                 startY = centerY - basePalmHeight * 0.45f,
@@ -433,7 +433,7 @@ private fun DrawScope.drawHandGesture(
         }
 
         // Draw Ring Finger (i=2)
-        if (fingersCount >= 3) {
+        if (fingersCount in 3..5) {
             drawFinger(
                 startX = fingerStartX + 2 * fingerSpacing,
                 startY = centerY - basePalmHeight * 0.43f,
@@ -447,7 +447,7 @@ private fun DrawScope.drawHandGesture(
         }
 
         // Draw Pinky Finger (i=3)
-        if (fingersCount >= 4) {
+        if (fingersCount in 4..6) {
             drawFinger(
                 startX = fingerStartX + 3 * fingerSpacing,
                 startY = centerY - basePalmHeight * 0.38f,
