@@ -42,8 +42,7 @@ fun MainMenuScreen(
     viewModel: GameViewModel,
     onStartMatchConfig: () -> Unit,
     onOpenStats: () -> Unit,
-    onOpenAchievements: () -> Unit,
-    onOpenThemes: () -> Unit
+    onOpenAchievements: () -> Unit
 ) {
     val stats by viewModel.playerStats.collectAsState()
 
@@ -242,29 +241,7 @@ fun MainMenuScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Customize Arena
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(100.dp)
-                            .testTag("explore_stadiums_menu")
-                            .clip(RoundedCornerShape(12.dp)),
-                        colors = CardDefaults.cardColors(containerColor = ImmersiveSurface),
-                        border = BorderStroke(1.dp, ImmersiveBorder),
-                        onClick = onOpenThemes
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = ImmersiveLime, modifier = Modifier.size(30.dp))
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text("Stadiums", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        }
-                    }
+
 
                     // Achievements
                     Card(

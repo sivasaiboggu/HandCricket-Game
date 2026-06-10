@@ -17,7 +17,7 @@ import com.example.ui.screens.ConfigureMatchScreen
 import com.example.ui.screens.MainMenuScreen
 import com.example.ui.screens.MatchPlayScreen
 import com.example.ui.screens.StatsAndHistoryScreen
-import com.example.ui.screens.ThemesScreen
+
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.GameViewModel
 import com.example.ui.viewmodel.Screen
@@ -41,8 +41,7 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 onStartMatchConfig = { viewModel.navigateTo(Screen.CONFIG) },
                                 onOpenStats = { viewModel.navigateTo(Screen.STATS) },
-                                onOpenAchievements = { viewModel.navigateTo(Screen.ACHIEVEMENTS) },
-                                onOpenThemes = { viewModel.navigateTo(Screen.THEMES) }
+                                onOpenAchievements = { viewModel.navigateTo(Screen.ACHIEVEMENTS) }
                             )
                         }
                         Screen.CONFIG -> {
@@ -75,12 +74,7 @@ class MainActivity : ComponentActivity() {
                                 onBack = { viewModel.navigateTo(Screen.MENU) }
                             )
                         }
-                        Screen.THEMES -> {
-                            ThemesScreen(
-                                viewModel = viewModel,
-                                onBack = { viewModel.navigateTo(Screen.MENU) }
-                            )
-                        }
+
                     }
                 }
             }

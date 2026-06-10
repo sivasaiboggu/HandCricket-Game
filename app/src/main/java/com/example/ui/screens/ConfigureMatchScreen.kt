@@ -41,7 +41,7 @@ fun ConfigureMatchScreen(
     var selectedOvers by remember { mutableStateOf(1) }
     var selectedWickets by remember { mutableStateOf(1) }
     var selectedDifficulty by remember { mutableStateOf(Difficulty.MEDIUM) }
-    var selectedTheme by remember { mutableStateOf(StadiumTheme.CLASSIC_TURF) }
+
 
     val backgroundBrush = Brush.verticalGradient(
         colors = listOf(ImmersiveBackground, ImmersiveSurface)
@@ -171,36 +171,7 @@ fun ConfigureMatchScreen(
                         }
                     }
 
-                    // 4. Stadium choice card
-                    OptionCard(title = "Arena Theme Selection") {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            StadiumTheme.values().forEach { theme ->
-                                val isUnlocked = stats.level >= theme.levelRequired
-                                val isSelected = selectedTheme == theme
-                                
-                                Button(
-                                    onClick = { if (isUnlocked) selectedTheme = theme },
-                                    enabled = isUnlocked,
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (isSelected) ImmersiveLime else ImmersiveBorder.copy(alpha = 0.4f),
-                                        disabledContainerColor = ImmersiveSurface.copy(alpha = 0.3f),
-                                        contentColor = if (isSelected) ImmersiveBackground else Color.White
-                                    ),
-                                    modifier = Modifier.weight(1f).testTag("quick_theme_${theme.id}"),
-                                    shape = RoundedCornerShape(8.dp)
-                                ) {
-                                    Text(
-                                        text = if (isUnlocked) theme.title.split(" ").first() else "🔒",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-                    }
+
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -212,7 +183,7 @@ fun ConfigureMatchScreen(
                             overs = selectedOvers,
                             wickets = selectedWickets,
                             difficulty = selectedDifficulty,
-                            theme = selectedTheme
+                            theme = StadiumTheme.CLASSIC_TURF
                         )
                     },
                     modifier = Modifier

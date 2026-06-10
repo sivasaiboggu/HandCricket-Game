@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 enum class Screen {
-    MENU, CONFIG, TOSS, PLAY, STATS, ACHIEVEMENTS, THEMES
+    MENU, CONFIG, TOSS, PLAY, STATS, ACHIEVEMENTS
 }
 
 enum class PlayerRole {
@@ -64,7 +64,10 @@ data class MatchState(
     val dotBallsBowledThisMatch: Int = 0,
     val sixesHitThisMatch: Int = 0,
     val winMessage: String = "",
-    val xpGained: Int = 0
+    val xpGained: Int = 0,
+    val isActionShaking: Boolean = false,
+    val timerValue: Int = 10,
+    val recentBalls: List<String> = emptyList()
 )
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
@@ -116,6 +119,24 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val isCoinSpinning: StateFlow<Boolean> = _isCoinSpinning.asStateFlow()
 
     private val aiEngine = HandCricketAi()
+    private var timerJob: kotlinx.coroutines.Job? = null
+
+    fun startCountdownTimer() {
+        timerJob?.cancel()
+        _matchState.update { it.copy(timerValue = 10) }
+        timerJob = viewModelScope.launch {
+            while (_matchState.value.timerValue > 0) {
+                delay(1000)
+                if (_matchState.value.phase == MatchPhase.COMPLETED) {
+                    timerJob?.cancel()
+                    return@launch
+                }
+                _matchState.update { it.copy(timerValue = it.timerValue - 1) }
+            }
+            // Timer expired! Play 0 (representing dot ball / timeout)
+            playBall(0)
+        }
+    }
 
     // Navigation helper
     fun navigateTo(screen: Screen) {
@@ -130,18 +151,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 matchWicketsLimit = wickets,
                 difficulty = difficulty,
                 stadiumTheme = theme,
-                phase = MatchPhase.NOT_STARTED
+                phase = MatchPhase.NOT_STARTED,
+                recentBalls = emptyList()
             )
         }
         aiEngine.resetSession()
         _tossWinner.value = null
         _tossResult.value = ""
         navigateTo(Screen.TOSS)
-    }
-
-    // Stadium selection
-    fun selectStadiumTheme(theme: StadiumTheme) {
-        _matchState.update { it.copy(stadiumTheme = theme) }
     }
 
     // Toss Choice
@@ -167,12 +184,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 _matchState.update {
                     it.copy(
                         playerRole = role,
-                        commentText = "AI won the toss and elected to ${aiTossChoice.lowercase()} first!",
+                        commentText = "AI won the toss and elected to ${if (aiTossChoice == "BATTING") "bat" else "bowl"} first!",
                         phase = MatchPhase.INNINGS_1
                     )
                 }
                 delay(1200)
                 navigateTo(Screen.PLAY)
+                startCountdownTimer()
             }
         }
     }
@@ -181,20 +199,37 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _matchState.update {
             it.copy(
                 playerRole = roleChoice,
-                commentText = "You won the toss and elected to ${roleChoice.name.lowercase()} first!",
+                commentText = "You won the toss and elected to ${if (roleChoice == PlayerRole.BATTING) "bat" else "bowl"} first!",
                 phase = MatchPhase.INNINGS_1
             )
         }
         navigateTo(Screen.PLAY)
+        startCountdownTimer()
     }
 
     // Play Ball action
     fun playBall(playerMove: Int) {
         if (_matchState.value.phase == MatchPhase.COMPLETED) return
         
+        // Cancel timer immediately
+        timerJob?.cancel()
+
         viewModelScope.launch {
-            // Record player move in smart AI memory
-            aiEngine.recordPlayerMove(playerMove)
+            // Put game into shaking phase first
+            _matchState.update {
+                it.copy(
+                    isActionShaking = true,
+                    lastPlayerMove = 0,
+                    lastAiMove = 0,
+                    commentText = "Shaking hands... 1... 2... 3..."
+                )
+            }
+            delay(1000) // Shake for 1 sec
+
+            // Record player move in smart AI memory (ignore 0 timeout moves)
+            if (playerMove in 1..6) {
+                aiEngine.recordPlayerMove(playerMove)
+            }
 
             val currentState = _matchState.value
             val role = if (currentState.playerRole == PlayerRole.BATTING) ChoiceRole.BATSMAN else ChoiceRole.BOWLER
@@ -227,11 +262,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 isScored = true
                 if (currentState.playerRole == PlayerRole.BATTING) {
                     newPlayerRuns += playerMove
-                    commentary = generateBattingCommentary(playerMove)
+                    commentary = if (playerMove == 0) {
+                        "Timeout! You failed to play in time. Dot ball!"
+                    } else {
+                        generateBattingCommentary(playerMove)
+                    }
                     if (playerMove == 6) sixesHitThisBall++
                 } else {
                     newAiRuns += aiMove
-                    commentary = generateBowlingCommentary(aiMove)
+                    commentary = if (playerMove == 0) {
+                        "Timeout! You failed to bowl in time. AI batsman scored $aiMove!"
+                    } else {
+                        generateBowlingCommentary(aiMove)
+                    }
                     if (aiMove == 6) {
                         // AI hit a 6
                     } else if (aiMove == 0 || playerMove == 6) {
@@ -243,9 +286,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            // Temporarily flag animation variables
+            // Timeline result calculation for Crex scoreboard
+            val ballResult = if (isOut) {
+                "W"
+            } else if (currentState.playerRole == PlayerRole.BATTING) {
+                playerMove.toString()
+            } else {
+                aiMove.toString()
+            }
+            val updatedRecentBalls = (currentState.recentBalls + ballResult).takeLast(6)
+
+            // Reveal results
             _matchState.update {
                 it.copy(
+                    isActionShaking = false,
                     lastPlayerMove = playerMove,
                     lastAiMove = aiMove,
                     isOutEvent = isOut,
@@ -254,7 +308,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
 
-            delay(1200) // Wait for action shake-up and dynamic visuals
+            delay(1200) // Keep reveal visible
 
             // Clear visual screen flash
             _matchState.update {
@@ -290,9 +344,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         ballsBowled = 0,
                         playerRole = newRole,
                         target = targetScore,
-                        commentText = "Innings Break! Target is: $targetScore runs off $maxBalls balls!"
+                        commentText = "Innings Break! Target is: $targetScore runs off $maxBalls balls!",
+                        recentBalls = emptyList() // clear history on innings transition
                     )
                 }
+                startCountdownTimer()
                 return@launch
             }
 
@@ -341,9 +397,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     aiWickets = newAiWickets,
                     ballsBowled = newBallsBowled,
                     dotBallsBowledThisMatch = it.dotBallsBowledThisMatch + dotBallsThisBall,
-                    sixesHitThisMatch = it.sixesHitThisMatch + sixesHitThisBall
+                    sixesHitThisMatch = it.sixesHitThisMatch + sixesHitThisBall,
+                    recentBalls = updatedRecentBalls
                 )
             }
+            startCountdownTimer()
         }
     }
 
@@ -396,6 +454,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun restartSetup() {
+        timerJob?.cancel()
         _matchState.value = MatchState()
         navigateTo(Screen.MENU)
     }
@@ -403,8 +462,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // Commentary generators
     private fun generateBattingCommentary(runs: Int): String {
         return when (runs) {
-            6 -> "SHOT! High, high into the stellar sunset crowd for a massive SIX!"
-            4 -> "Sizzling boundary! Pulled away beautifully between cover and point!"
+            6 -> listOf(
+                "SHOT! High, high into the stellar sunset crowd for a massive SIX!",
+                "UNBELIEVABLE! Cleared the stadium roof! That ball is out of the park!",
+                "Glorious! Stand and deliver, an absolute monster of a six!",
+                "Incredible timing! He lofts it straight over long-on for a huge maximum!"
+            ).random()
+            4 -> listOf(
+                "Sizzling boundary! Pulled away beautifully between cover and point!",
+                "Cracking shot! Raced across the outfield like a tracer bullet!",
+                "Flawlessly timed! Pierces the gap through extra-cover for a premium four!",
+                "Delicate touch! Sliced past third man, the fielder had no chance!"
+            ).random()
             3 -> "Sensational running! Squeezed 3 runs off a crisp forward defense."
             2 -> "Classic double! Pushed gently into deep mid-on to work the field."
             1 -> "Sustained single. Gently rotated strike down to third man."
@@ -414,8 +483,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun generateBowlingCommentary(runs: Int): String {
         return when (runs) {
-            6 -> "Smashed by AI! High above long-on for a cracking SIX!"
-            4 -> "AI pulls it away! Beautiful boundary through deep square leg."
+            6 -> listOf(
+                "Smashed by AI! High above long-on for a cracking SIX!",
+                "Oh no! AI connects perfectly and launches it over the midwicket boundary!",
+                "Dispatched! AI moves across and scoops it over fine leg for six runs!"
+            ).random()
+            4 -> listOf(
+                "AI pulls it away! Beautiful boundary through deep square leg.",
+                "Shot! AI finds the gap at cover-point and it speeds away for four.",
+                "Thumped! AI steps down the track and hits it hard through mid-off for boundary!"
+            ).random()
             3 -> "Smart running by AI. Picked up three runs in deep cover."
             2 -> "AI slices it down. Runs hard to grab a comfortable couple."
             1 -> "AI taps it into the gap for a quick single."
@@ -428,14 +505,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             when (runs) {
                 6 -> "OUT! Caught right on the boundary cushion trying to clear the ropes!"
                 4 -> "OUT! Sharp catch at gully! Gilded edge cut off in style."
-                3 -> "OUT! Mindplay match! Stunned right down the track."
-                else -> "OUT! Stumps shattered! Clean bowled by a masterful delivery!"
+                3 -> "OUT! Run out! AI defender executes a lightning-fast throw!"
+                else -> listOf(
+                    "OUT! Stumps shattered! Clean bowled by a masterful delivery!",
+                    "OUT! Plumb LBW! The batsman was caught dead in front of the stumps!",
+                    "OUT! Big appeal, and it's caught behind by the wicketkeeper!"
+                ).random()
             }
         } else {
             when (runs) {
                 6 -> "WICKETS FLYING! AI mistimed it, cleanly caught at deep long-off!"
                 4 -> "OUT! Brilliant diving catch by the keeper! AI is stunned."
-                else -> "BOWLED HIM! Absolute peach of a ball, the bails are dismantled!"
+                else -> listOf(
+                    "BOWLED HIM! Absolute peach of a ball, the bails are dismantled!",
+                    "OUT! AI gets a leading edge and is caught easily at mid-on!",
+                    "OUT! Trapped in front! Absolute beauty of a delivery wickets the AI!"
+                ).random()
             }
         }
     }
