@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Beautiful grass gradient -->
+    <path
+        android:fillColor="#1B5E20"
+        android:pathData="M0,0h108v108h-108z" />
+    <!-- Striped grass pattern -->
+    <path android:fillColor="#2E7D32" android:pathData="M0,0 h18 v108 h-18 Z" />
+    <path android:fillColor="#2E7D32" android:pathData="M36,0 h18 v108 h-18 Z" />
+    <path android:fillColor="#2E7D32" android:pathData="M72,0 h18 v108 h-18 Z" />
+    <!-- Pitch outline in center -->
+    <path
+        android:fillColor="#8D6E63"
+        android:pathData="M44,24 h20 v60 h-20 Z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:fillColor="#00000000"
+        android:pathData="M44,24 h20 v60 h-20 Z" />
+    <!-- Crease lines -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:pathData="M44,32 h20 M44,76 h20" />
+</vector>

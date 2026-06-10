@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Stylized cricket wickets at the back (Left-Center) -->
+    <path
+        android:strokeColor="#FFD54F"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M32,36 v36 M38,36 v36 M44,36 v36" />
+    <path
+        android:strokeColor="#FFD54F"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M30,36 h16" />
+
+    <!-- Stylized Cricket Bat (Diagonal) -->
+    <!-- Handle (Orange/Red) -->
+    <path
+        android:strokeColor="#FF5722"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M32,76 L48,60" />
+    <!-- Blade (Golden Yellow Wood) -->
+    <path
+        android:fillColor="#FFCA28"
+        android:pathData="M48,60 L72,36 C73.5,34.5 76,34.5 77.5,36 C79,37.5 79,40 77.5,41.5 L53.5,65.5 Z" />
+    <path
+        android:strokeColor="#FFF8E1"
+        android:strokeWidth="1.2"
+        android:pathData="M48,60 L72,36" />
+
+    <!-- Outlined Sports Hand showing numbers in foreground (Centered Right) -->
+    <!-- Hand base/palm -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M52,68 C52,65 55,62 58,62 C61,62 63,65 64,68 L66,74 L74,74 C78,74 81,77 81,81 L81,88 H50 L52,68 Z" />
+    
+    <!-- 5 outreaching fingers for Hand Cricket play -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="
+            M54,65 v-15 
+            M58,62 v-18 
+            M62,62 v-20 
+            M66,63 v-16 
+            M70,66 l8,-8" />
+</vector>
