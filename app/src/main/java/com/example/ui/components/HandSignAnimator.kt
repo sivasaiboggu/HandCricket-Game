@@ -447,7 +447,7 @@ private fun DrawScope.drawHandGesture(
         }
 
         // Draw Pinky Finger (i=3)
-        if (fingersCount in 4..6) {
+        if (fingersCount in 4..5) {
             drawFinger(
                 startX = fingerStartX + 3 * fingerSpacing,
                 startY = centerY - basePalmHeight * 0.38f,

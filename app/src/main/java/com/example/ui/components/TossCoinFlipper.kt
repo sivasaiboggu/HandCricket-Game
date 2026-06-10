@@ -10,6 +10,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.dp
 import kotlin.math.cos
 
@@ -105,6 +107,29 @@ fun TossCoinFlipper(
             )
 
             // Inner design text representations on Canvas
+            val letter = if (isSpinning) {
+                if ((spinAngle / 90).toInt() % 2 == 0) "H" else "T"
+            } else {
+                if (result == "HEADS") "H" else if (result == "TAILS") "T" else ""
+            }
+
+            if (letter.isNotEmpty()) {
+                val textScaleY = if (isSpinning) currentScaleY.coerceAtLeast(0.01f) else 1.0f
+                scale(scaleX = 1f, scaleY = textScaleY, pivot = Offset(centerX, centerY)) {
+                    drawContext.canvas.nativeCanvas.drawText(
+                        letter,
+                        centerX,
+                        centerY + (radius * 0.3f),
+                        android.graphics.Paint().apply {
+                            color = android.graphics.Color.WHITE
+                            textSize = radius * 0.9f
+                            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+                            textAlign = android.graphics.Paint.Align.CENTER
+                        }
+                    )
+                }
+            }
+
             if (!isSpinning && result.isNotEmpty()) {
                 val textColor = Color.White
                 // Draw inner circle decoration

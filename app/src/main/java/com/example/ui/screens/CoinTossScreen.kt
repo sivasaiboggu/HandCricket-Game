@@ -41,6 +41,7 @@ fun CoinTossScreen(
     val isSpinning by viewModel.isCoinSpinning.collectAsState()
     val result by viewModel.tossResult.collectAsState()
     val winner by viewModel.tossWinner.collectAsState()
+    val matchState by viewModel.matchState.collectAsState()
 
     var playerChoice by remember { mutableStateOf<String?>(null) } // "HEADS" or "TAILS"
 
@@ -207,7 +208,7 @@ fun CoinTossScreen(
                         } else {
                             // AI Won
                             Text(
-                                text = "AI won the toss and gets to decide...",
+                                text = if (matchState.commentText.contains("elected")) matchState.commentText else "AI won the toss and gets to decide...",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
