@@ -14,6 +14,10 @@ class GameRepository(private val gameDao: GameDao) {
     val matchHistory: Flow<List<MatchHistory>> = gameDao.getMatchHistoryFlow()
     val achievements: Flow<List<Achievement>> = gameDao.getAchievementsFlow()
 
+    suspend fun savePlayerStatsDirect(stats: PlayerStats) {
+        gameDao.insertOrUpdatePlayerStats(stats)
+    }
+
     suspend fun initializeDataIfNeeded() {
         // Run checks to ensure default player stats and achievements exist
         val stats = gameDao.getPlayerStatsDirect()

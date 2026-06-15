@@ -90,6 +90,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val matchHistory: StateFlow<List<MatchHistory>>
     val achievements: StateFlow<List<Achievement>>
 
+    private val _friends = MutableStateFlow<List<String>>(emptyList())
+    val friends: StateFlow<List<String>> = _friends.asStateFlow()
+
     private val multiplayerManager = MultiplayerManager.getInstance(application)
     private var mpObserverJob: kotlinx.coroutines.Job? = null
     private var isResolvingMpBall = false
@@ -159,6 +162,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 _currentScreen.value = Screen.PROFILE_SETUP
             }
+            restoreStatsFromFirebase(currentUser.uid)
+            loadFriendsFromFirebase()
         } else {
             _currentScreen.value = Screen.SIGN_IN
         }
@@ -259,15 +264,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (task.isSuccessful) {
                     val uid = auth.currentUser?.uid ?: ""
                     val fallbackUsername = email.substringBefore("@")
+                    
                     try {
                         val database = com.google.firebase.database.FirebaseDatabase.getInstance()
                         val dbRef = database.getReference("users").child(uid)
-                        dbRef.child("username").get().addOnCompleteListener { dbTask ->
+                        dbRef.child("credentials").child("username").get().addOnCompleteListener { dbTask ->
                             val username = if (dbTask.isSuccessful) {
-                                dbTask.result?.value as? String ?: fallbackUsername
+                                val encryptedUsername = dbTask.result?.value as? String
+                                if (!encryptedUsername.isNullOrEmpty()) {
+                                    com.example.data.SecurityHelper.decrypt(encryptedUsername)
+                                } else {
+                                    fallbackUsername
+                                }
                             } else {
                                 fallbackUsername
                             }
+                            
                             // Save securely locally
                             com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
                             _matchState.update { 
@@ -276,6 +288,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                                     isOfflineMode = false
                                 ) 
                             }
+                            
+                            // Restore stats and friends list
+                            restoreStatsFromFirebase(uid)
+                            loadFriendsFromFirebase()
+                            
                             navigateTo(Screen.MENU)
                             onSuccess()
                         }
@@ -303,35 +320,35 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
                     val uid = auth.currentUser?.uid ?: ""
+                    
+                    // Save securely locally
+                    com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
+                    _matchState.update { 
+                        it.copy(
+                            myPlayerName = username,
+                            isOfflineMode = false
+                        ) 
+                    }
+                    
+                    // Push encrypted credentials and default stats to Firebase
                     try {
                         val database = com.google.firebase.database.FirebaseDatabase.getInstance()
-                        val userMap = mapOf("username" to username)
+                        val encUsername = com.example.data.SecurityHelper.encrypt(username)
+                        val encEmail = com.example.data.SecurityHelper.encrypt(email)
+                        val userMap = mapOf(
+                            "username" to encUsername,
+                            "email" to encEmail
+                        )
+                        database.getReference("users").child(uid).child("credentials").setValue(userMap)
                         
-                        database.getReference("users").child(uid).setValue(userMap)
-                            .addOnCompleteListener { dbTask ->
-                                // Save securely locally
-                                com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
-                                _matchState.update { 
-                                    it.copy(
-                                        myPlayerName = username,
-                                        isOfflineMode = false
-                                    ) 
-                                }
-                                navigateTo(Screen.MENU)
-                                onSuccess()
-                            }
+                        // Push initial empty stats to cloud
+                        syncStatsToFirebase(uid, PlayerStats())
                     } catch (e: Exception) {
-                        // Fallback on database URL missing
-                        com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
-                        _matchState.update { 
-                            it.copy(
-                                myPlayerName = username,
-                                isOfflineMode = false
-                            ) 
-                        }
-                        navigateTo(Screen.MENU)
-                        onSuccess()
+                        // Ignore DB initialization issues, local save is primary fallback
                     }
+                    
+                    navigateTo(Screen.MENU)
+                    onSuccess()
                 } else {
                     onError(task.exception?.localizedMessage ?: "Registration failed")
                 }
@@ -349,13 +366,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     try {
                         val database = com.google.firebase.database.FirebaseDatabase.getInstance()
                         val dbRef = database.getReference("users").child(uid)
-                        dbRef.child("username").get().addOnCompleteListener { dbTask ->
-                            val existingName = dbTask.result?.value as? String
-                            if (!existingName.isNullOrEmpty()) {
-                                finalUsername = existingName
+                        dbRef.child("credentials").child("username").get().addOnCompleteListener { dbTask ->
+                            val encryptedUsername = dbTask.result?.value as? String
+                            if (!encryptedUsername.isNullOrEmpty()) {
+                                finalUsername = com.example.data.SecurityHelper.decrypt(encryptedUsername)
                             } else {
+                                // Save credentials encrypted
+                                val encUsername = com.example.data.SecurityHelper.encrypt(finalUsername)
+                                val encEmail = com.example.data.SecurityHelper.encrypt(email)
+                                val userMap = mapOf(
+                                    "username" to encUsername,
+                                    "email" to encEmail
+                                )
                                 try {
-                                    dbRef.child("username").setValue(finalUsername)
+                                    dbRef.child("credentials").setValue(userMap)
+                                    syncStatsToFirebase(uid, PlayerStats())
                                 } catch (dbEx: Exception) {
                                     // Ignore db write failure
                                 }
@@ -367,6 +392,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                                     isOfflineMode = false
                                 ) 
                             }
+                            
+                            // Restore stats and friends list
+                            restoreStatsFromFirebase(uid)
+                            loadFriendsFromFirebase()
+                            
                             navigateTo(Screen.MENU)
                             onSuccess()
                         }
@@ -395,12 +425,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val uid = auth.currentUser?.uid ?: ""
                 try {
                     val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+                    val encUsername = com.example.data.SecurityHelper.encrypt(username)
+                    val encEmail = com.example.data.SecurityHelper.encrypt(email)
                     val userMap = mapOf(
-                        "username" to username,
-                        "email" to email,
+                        "username" to encUsername,
+                        "email" to encEmail,
                         "provider" to "google"
                     )
-                    database.getReference("users").child(uid).setValue(userMap)
+                    database.getReference("users").child(uid).child("credentials").setValue(userMap)
                         .addOnCompleteListener { dbTask ->
                             com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
                             _matchState.update { 
@@ -409,6 +441,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                                     isOfflineMode = false
                                 ) 
                             }
+                            syncStatsToFirebase(uid, PlayerStats())
                             navigateTo(Screen.MENU)
                             onSuccess()
                         }
@@ -1002,6 +1035,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             dotBallsBowled = finalDots,
             sixesHit = finalSixes
         )
+
+        // Sync stats to Firebase under users/{uid}/stats in an encrypted way
+        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        if (currentUser != null) {
+            val uid = currentUser.uid
+            viewModelScope.launch {
+                delay(200) // allow Room write to complete
+                val stats = playerStats.value
+                syncStatsToFirebase(uid, stats)
+            }
+        }
     }
 
     fun restartSetup() {
@@ -1077,6 +1121,150 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     "OUT! Trapped in front! Absolute beauty of a delivery wickets the AI!"
                 ).random()
             }
+        }
+    }
+
+    fun syncStatsToFirebase(uid: String, stats: PlayerStats) {
+        val statsJson = """
+            {
+                "level": ${stats.level},
+                "exp": ${stats.exp},
+                "matchesPlayed": ${stats.matchesPlayed},
+                "matchesWon": ${stats.matchesWon},
+                "matchesLost": ${stats.matchesLost},
+                "runsScored": ${stats.runsScored},
+                "wicketsTaken": ${stats.wicketsTaken},
+                "highestScore": ${stats.highestScore},
+                "dotBallsBowled": ${stats.dotBallsBowled},
+                "sixesHit": ${stats.sixesHit},
+                "themeUnlockedSunset": ${stats.themeUnlockedSunset},
+                "themeUnlockedCyber": ${stats.themeUnlockedCyber}
+            }
+        """.trimIndent()
+        val encryptedData = com.example.data.SecurityHelper.encrypt(statsJson)
+        val dataMap = mapOf("encrypted_data" to encryptedData)
+        try {
+            val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+            database.getReference("users").child(uid).child("stats").setValue(dataMap)
+        } catch (e: Exception) {
+            // Ignore DB sync failure
+        }
+    }
+
+    fun restoreStatsFromFirebase(uid: String) {
+        try {
+            val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+            database.getReference("users").child(uid).child("stats").child("encrypted_data")
+                .get().addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        val encryptedData = task.result?.value as? String
+                        if (!encryptedData.isNullOrEmpty()) {
+                            val decryptedJson = com.example.data.SecurityHelper.decrypt(encryptedData)
+                            val stats = parsePlayerStatsJson(decryptedJson)
+                            if (stats != null) {
+                                viewModelScope.launch {
+                                    repository.savePlayerStatsDirect(stats)
+                                }
+                            }
+                        }
+                    }
+                }
+        } catch (e: Exception) {
+            // Ignore if database URL is missing
+        }
+    }
+
+    private fun parsePlayerStatsJson(json: String): PlayerStats? {
+        return try {
+            val clean = json.replace("{", "").replace("}", "").trim()
+            val pairs = clean.split(",")
+            var level = 1
+            var exp = 0
+            var matchesPlayed = 0
+            var matchesWon = 0
+            var matchesLost = 0
+            var runsScored = 0
+            var wicketsTaken = 0
+            var highestScore = 0
+            var dotBallsBowled = 0
+            var sixesHit = 0
+            var themeUnlockedSunset = false
+            var themeUnlockedCyber = false
+
+            for (pair in pairs) {
+                val parts = pair.split(":")
+                if (parts.size == 2) {
+                    val key = parts[0].replace("\"", "").trim()
+                    val value = parts[1].replace("\"", "").trim()
+                    when (key) {
+                        "level" -> level = value.toInt()
+                        "exp" -> exp = value.toInt()
+                        "matchesPlayed" -> matchesPlayed = value.toInt()
+                        "matchesWon" -> matchesWon = value.toInt()
+                        "matchesLost" -> matchesLost = value.toInt()
+                        "runsScored" -> runsScored = value.toInt()
+                        "wicketsTaken" -> wicketsTaken = value.toInt()
+                        "highestScore" -> highestScore = value.toInt()
+                        "dotBallsBowled" -> dotBallsBowled = value.toInt()
+                        "sixesHit" -> sixesHit = value.toInt()
+                        "themeUnlockedSunset" -> themeUnlockedSunset = value.toBoolean()
+                        "themeUnlockedCyber" -> themeUnlockedCyber = value.toBoolean()
+                    }
+                }
+            }
+            PlayerStats(
+                id = 1,
+                level = level,
+                exp = exp,
+                matchesPlayed = matchesPlayed,
+                matchesWon = matchesWon,
+                matchesLost = matchesLost,
+                runsScored = runsScored,
+                wicketsTaken = wicketsTaken,
+                highestScore = highestScore,
+                dotBallsBowled = dotBallsBowled,
+                sixesHit = sixesHit,
+                themeUnlockedSunset = themeUnlockedSunset,
+                themeUnlockedCyber = themeUnlockedCyber
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun addFriend(friendUid: String) {
+        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return
+        val myUid = currentUser.uid
+        try {
+            val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+            val encryptedFriendUid = com.example.data.SecurityHelper.encrypt(friendUid)
+            database.getReference("users").child(myUid).child("friends").child(friendUid).setValue(encryptedFriendUid)
+        } catch (e: Exception) {
+            // Ignore DB failure
+        }
+    }
+
+    fun loadFriendsFromFirebase() {
+        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return
+        val myUid = currentUser.uid
+        try {
+            val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+            database.getReference("users").child(myUid).child("friends")
+                .get().addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        val list = mutableListOf<String>()
+                        task.result?.children?.forEach { child ->
+                            val encryptedFriendUid = child.value as? String
+                            if (!encryptedFriendUid.isNullOrEmpty()) {
+                                val friendUid = com.example.data.SecurityHelper.decrypt(encryptedFriendUid)
+                                list.add(friendUid)
+                            }
+                        }
+                        _friends.value = list
+                    }
+                }
+        } catch (e: Exception) {
+            // Ignore
         }
     }
 }
