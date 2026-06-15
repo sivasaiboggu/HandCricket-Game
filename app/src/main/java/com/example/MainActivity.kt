@@ -17,6 +17,10 @@ import com.example.ui.screens.ConfigureMatchScreen
 import com.example.ui.screens.MainMenuScreen
 import com.example.ui.screens.MatchPlayScreen
 import com.example.ui.screens.StatsAndHistoryScreen
+import com.example.ui.screens.MultiplayerMatchmakingScreen
+import com.example.ui.screens.ProfileSetupScreen
+
+
 
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.viewmodel.GameViewModel
@@ -74,6 +78,20 @@ class MainActivity : ComponentActivity() {
                                 onBack = { viewModel.navigateTo(Screen.MENU) }
                             )
                         }
+                        Screen.MULTIPLAYER_MATCHMAKING -> {
+                            MultiplayerMatchmakingScreen(
+                                viewModel = viewModel,
+                                onBack = { viewModel.cancelMultiplayerMatchmaking() }
+                            )
+                        }
+                        Screen.PROFILE_SETUP -> {
+                            ProfileSetupScreen(
+                                viewModel = viewModel,
+                                onBack = { viewModel.navigateTo(Screen.MENU) }
+                            )
+                        }
+
+
 
                     }
                 }

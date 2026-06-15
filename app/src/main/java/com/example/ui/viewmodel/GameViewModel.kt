@@ -4,6 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
+import com.example.data.MultiplayerManager
+import com.example.data.MultiplayerStatus
+import com.example.data.OnlineRoom
 import com.example.data.model.Achievement
 import com.example.data.model.MatchHistory
 import com.example.data.model.PlayerStats
@@ -19,8 +22,9 @@ import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 enum class Screen {
-    MENU, CONFIG, TOSS, PLAY, STATS, ACHIEVEMENTS
+    MENU, CONFIG, TOSS, PLAY, STATS, ACHIEVEMENTS, MULTIPLAYER_MATCHMAKING, PROFILE_SETUP
 }
+
 
 enum class PlayerRole {
     BATTING, BOWLING
@@ -67,8 +71,15 @@ data class MatchState(
     val xpGained: Int = 0,
     val isActionShaking: Boolean = false,
     val timerValue: Int = 10,
-    val recentBalls: List<String> = emptyList()
+    val recentBalls: List<String> = emptyList(),
+    val isMultiplayer: Boolean = false,
+    val myPlayerNum: Int = 1,
+    val multiplayerStatus: MultiplayerStatus = MultiplayerStatus.UNINITIALIZED,
+    val roomId: String = "",
+    val myPlayerName: String = "YOU",
+    val opponentPlayerName: String = "AI DEFENDER"
 )
+
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -76,6 +87,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     val playerStats: StateFlow<PlayerStats>
     val matchHistory: StateFlow<List<MatchHistory>>
     val achievements: StateFlow<List<Achievement>>
+
+    private val multiplayerManager = MultiplayerManager.getInstance(application)
+    private var mpObserverJob: kotlinx.coroutines.Job? = null
+    private var isResolvingMpBall = false
 
     init {
         val database = AppDatabase.getDatabase(application)
@@ -99,6 +114,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             repository.initializeDataIfNeeded()
+        }
+
+        // Keep multiplayerStatus synced in local match state
+        viewModelScope.launch {
+            multiplayerManager.status.collect { status ->
+                _matchState.update { it.copy(multiplayerStatus = status) }
+            }
         }
     }
 
@@ -152,7 +174,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 difficulty = difficulty,
                 stadiumTheme = theme,
                 phase = MatchPhase.NOT_STARTED,
-                recentBalls = emptyList()
+                recentBalls = emptyList(),
+                isMultiplayer = false
             )
         }
         aiEngine.resetSession()
@@ -207,12 +230,109 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         startCountdownTimer()
     }
 
+    // Multiplayer Matchmaking
+    fun startMultiplayerMatchmaking() {
+        val prefs = getApplication<Application>().getSharedPreferences("hand_cricket_prefs", android.content.Context.MODE_PRIVATE)
+        val cachedName = prefs.getString("username", "") ?: ""
+        
+        if (cachedName.isEmpty()) {
+            navigateTo(Screen.PROFILE_SETUP)
+        } else {
+            initiateMatchmaking(cachedName)
+        }
+    }
+
+    private fun initiateMatchmaking(username: String) {
+        navigateTo(Screen.MULTIPLAYER_MATCHMAKING)
+        multiplayerManager.startMatchmaking(username) { room ->
+            val myRole = if (multiplayerManager.myPlayerNum == 1) PlayerRole.BATTING else PlayerRole.BOWLING
+            val oppName = if (multiplayerManager.myPlayerNum == 1) room.player2Name else room.player1Name
+            
+            _matchState.update {
+                it.copy(
+                    phase = MatchPhase.INNINGS_1,
+                    currentInnings = 1,
+                    playerRole = myRole,
+                    playerRuns = 0,
+                    playerWickets = 0,
+                    aiRuns = 0,
+                    aiWickets = 0,
+                    ballsBowled = 0,
+                    target = null,
+                    isMultiplayer = true,
+                    myPlayerNum = multiplayerManager.myPlayerNum,
+                    roomId = room.roomId,
+                    myPlayerName = username,
+                    opponentPlayerName = if (oppName.isEmpty()) "OPPONENT" else oppName,
+                    commentText = if (multiplayerManager.myPlayerNum == 1) {
+                        "Match Found! You are batting first. Choose your number!"
+                    } else {
+                        "Match Found! You are bowling first. Guess the opponent's number!"
+                    },
+                    recentBalls = emptyList()
+                )
+            }
+            navigateTo(Screen.PLAY)
+            startCountdownTimer()
+            observeMultiplayerRoom(username)
+        }
+    }
+
+    fun saveUsernameAndMatch(username: String) {
+        val prefs = getApplication<Application>().getSharedPreferences("hand_cricket_prefs", android.content.Context.MODE_PRIVATE)
+        prefs.edit().putString("username", username).apply()
+        initiateMatchmaking(username)
+    }
+
+    fun cancelMultiplayerMatchmaking() {
+        multiplayerManager.disconnect()
+        navigateTo(Screen.MENU)
+    }
+
+    private fun observeMultiplayerRoom(myUsername: String) {
+        mpObserverJob?.cancel()
+        isResolvingMpBall = false
+        mpObserverJob = viewModelScope.launch {
+            var lastProcessedBall = -1
+            multiplayerManager.roomData.collect { room ->
+                if (room == null || room.status != "PLAYING") return@collect
+
+                // Update opponent's name dynamically once they join the lobby
+                val oppName = if (multiplayerManager.myPlayerNum == 1) room.player2Name else room.player1Name
+                if (oppName.isNotEmpty() && _matchState.value.opponentPlayerName != oppName) {
+                    _matchState.update {
+                        it.copy(opponentPlayerName = oppName)
+                    }
+                }
+
+                if (isResolvingMpBall) return@collect
+
+                if (room.player1Move > 0 && room.player2Move > 0) {
+                    if (room.ballsBowled > lastProcessedBall) {
+                        lastProcessedBall = room.ballsBowled
+                        isResolvingMpBall = true
+                        resolveMultiplayerBall(room.player1Move, room.player2Move)
+                    }
+                }
+            }
+        }
+    }
+
+
     // Play Ball action
     fun playBall(playerMove: Int) {
         if (_matchState.value.phase == MatchPhase.COMPLETED) return
         
         // Cancel timer immediately
         timerJob?.cancel()
+
+        if (_matchState.value.isMultiplayer) {
+            multiplayerManager.submitMove(playerMove)
+            _matchState.update {
+                it.copy(commentText = "Waiting for opponent's choice...")
+            }
+            return
+        }
 
         viewModelScope.launch {
             // Put game into shaking phase first
@@ -226,12 +346,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
             delay(1000) // Shake for 1 sec
 
+            val currentState = _matchState.value
+
             // Record player move in smart AI memory (ignore 0 timeout moves)
             if (playerMove in 1..6) {
-                aiEngine.recordPlayerMove(playerMove)
+                val isPlayerBatting = currentState.playerRole == PlayerRole.BATTING
+                aiEngine.recordPlayerMove(playerMove, isPlayerBatting)
             }
 
-            val currentState = _matchState.value
             val role = if (currentState.playerRole == PlayerRole.BATTING) ChoiceRole.BATSMAN else ChoiceRole.BOWLER
             val aiMove = aiEngine.generateAiMove(role, currentState.difficulty)
 
@@ -294,7 +416,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 aiMove.toString()
             }
-            val updatedRecentBalls = (currentState.recentBalls + ballResult).takeLast(6)
+            val updatedRecentBalls = currentState.recentBalls + ballResult
 
             // Reveal results
             _matchState.update {
@@ -388,7 +510,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            // Normal ball updates if innings goes on
             _matchState.update {
                 it.copy(
                     playerRuns = newPlayerRuns,
@@ -404,6 +525,187 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             startCountdownTimer()
         }
     }
+
+    private fun resolveMultiplayerBall(p1Move: Int, p2Move: Int) {
+        timerJob?.cancel()
+
+        viewModelScope.launch {
+            // Shake phase
+            _matchState.update {
+                it.copy(
+                    isActionShaking = true,
+                    lastPlayerMove = 0,
+                    lastAiMove = 0,
+                    commentText = "Shaking hands... 1... 2... 3..."
+                )
+            }
+            delay(1000)
+
+            val currentState = _matchState.value
+            val myNum = currentState.myPlayerNum
+            val myMove = if (myNum == 1) p1Move else p2Move
+            val opponentMove = if (myNum == 1) p2Move else p1Move
+
+            var newPlayerRuns = currentState.playerRuns
+            var newPlayerWickets = currentState.playerWickets
+            var newAiRuns = currentState.aiRuns
+            var newAiWickets = currentState.aiWickets
+            var newBallsBowled = currentState.ballsBowled + 1
+            var dotBallsThisBall = 0
+            var sixesHitThisBall = 0
+
+            val isOut = p1Move == p2Move
+            val runsVal = if (currentState.currentInnings == 1) p1Move else p2Move
+            
+            var commentary = ""
+
+            if (isOut) {
+                commentary = generateOutCommentary(runsVal, currentState.playerRole)
+                if (myNum == 1) {
+                    if (currentState.currentInnings == 1) newPlayerWickets++ else newAiWickets++
+                } else {
+                    if (currentState.currentInnings == 1) newAiWickets++ else newPlayerWickets++
+                }
+            } else {
+                if (myNum == 1) {
+                    if (currentState.currentInnings == 1) newPlayerRuns += runsVal else newAiRuns += runsVal
+                } else {
+                    if (currentState.currentInnings == 1) newAiRuns += runsVal else newPlayerRuns += runsVal
+                }
+                
+                commentary = if (currentState.playerRole == PlayerRole.BATTING) {
+                    if (runsVal == 0) "Timeout! Dot ball!" else generateBattingCommentary(runsVal)
+                } else {
+                    if (runsVal == 0) "Timeout! Opponent batsman scored 0!" else generateBowlingCommentary(runsVal)
+                }
+
+                if (runsVal == 6) sixesHitThisBall++
+                if (runsVal == 0) dotBallsThisBall++
+            }
+
+            // Timeline result chip
+            val ballResult = if (isOut) "W" else runsVal.toString()
+            val updatedRecentBalls = currentState.recentBalls + ballResult
+
+            // Reveal result
+            _matchState.update {
+                it.copy(
+                    isActionShaking = false,
+                    lastPlayerMove = myMove,
+                    lastAiMove = opponentMove,
+                    isOutEvent = isOut,
+                    isScoreEvent = !isOut,
+                    commentText = commentary
+                )
+            }
+
+            delay(1200)
+
+            // Clear visual screens
+            _matchState.update {
+                it.copy(
+                    isOutEvent = false,
+                    isScoreEvent = false
+                )
+            }
+
+            val maxBalls = currentState.matchOversLimit * 6
+
+            // Determine if Innings 1 ended
+            val batsmanWickets = if (currentState.currentInnings == 1) {
+                if (currentState.playerRole == PlayerRole.BATTING) newPlayerWickets else newAiWickets
+            } else 0
+
+            val isInnings1Ended = currentState.currentInnings == 1 && (
+                batsmanWickets >= currentState.matchWicketsLimit || newBallsBowled >= maxBalls
+            )
+
+            if (isInnings1Ended) {
+                val currentInnings1Score = if (currentState.playerRole == PlayerRole.BATTING) newPlayerRuns else newAiRuns
+                val targetScore = currentInnings1Score + 1
+                val newRole = if (currentState.playerRole == PlayerRole.BATTING) PlayerRole.BOWLING else PlayerRole.BATTING
+
+                _matchState.update {
+                    it.copy(
+                        currentInnings = 2,
+                        playerRuns = newPlayerRuns,
+                        playerWickets = newPlayerWickets,
+                        aiRuns = newAiRuns,
+                        aiWickets = newAiWickets,
+                        ballsBowled = 0,
+                        playerRole = newRole,
+                        target = targetScore,
+                        commentText = "Innings Break! Target is: $targetScore runs off $maxBalls balls!",
+                        recentBalls = emptyList()
+                    )
+                }
+
+                if (myNum == 1) {
+                    multiplayerManager.updateInningsTransition(PlayerRole.BOWLING, PlayerRole.BATTING)
+                }
+                isResolvingMpBall = false
+                startCountdownTimer()
+                return@launch
+            }
+
+            // Check Innings 2 chase logic
+            if (currentState.currentInnings == 2) {
+                val target = currentState.target ?: 1
+                val chaseScore = if (currentState.playerRole == PlayerRole.BATTING) newPlayerRuns else newAiRuns
+                val chaseWickets = if (currentState.playerRole == PlayerRole.BATTING) newPlayerWickets else newAiWickets
+
+                val isChaseSuccessful = chaseScore >= target
+                val isInnings2Ended = chaseWickets >= currentState.matchWicketsLimit || newBallsBowled >= maxBalls
+
+                if (isChaseSuccessful) {
+                    val playerWon = currentState.playerRole == PlayerRole.BATTING
+                    completeMatchFinish(
+                        newPlayerRuns, newPlayerWickets, newAiRuns, newAiWickets, playerWon,
+                        currentState, currentState.dotBallsBowledThisMatch + dotBallsThisBall,
+                        currentState.sixesHitThisMatch + sixesHitThisBall
+                    )
+                    if (myNum == 1) {
+                        multiplayerManager.resetRoomMoves(newBallsBowled)
+                    }
+                    isResolvingMpBall = false
+                    return@launch
+                } else if (isInnings2Ended) {
+                    val playerWon = currentState.playerRole == PlayerRole.BOWLING
+                    completeMatchFinish(
+                        newPlayerRuns, newPlayerWickets, newAiRuns, newAiWickets, playerWon,
+                        currentState, currentState.dotBallsBowledThisMatch + dotBallsThisBall,
+                        currentState.sixesHitThisMatch + sixesHitThisBall
+                    )
+                    if (myNum == 1) {
+                        multiplayerManager.resetRoomMoves(newBallsBowled)
+                    }
+                    isResolvingMpBall = false
+                    return@launch
+                }
+            }
+
+            // Normal ball update
+            _matchState.update {
+                it.copy(
+                    playerRuns = newPlayerRuns,
+                    playerWickets = newPlayerWickets,
+                    aiRuns = newAiRuns,
+                    aiWickets = newAiWickets,
+                    ballsBowled = newBallsBowled,
+                    dotBallsBowledThisMatch = it.dotBallsBowledThisMatch + dotBallsThisBall,
+                    sixesHitThisMatch = it.sixesHitThisMatch + sixesHitThisBall,
+                    recentBalls = updatedRecentBalls
+                )
+            }
+
+            if (myNum == 1) {
+                multiplayerManager.resetRoomMoves(newBallsBowled)
+            }
+            isResolvingMpBall = false
+            startCountdownTimer()
+        }
+    }
+
 
     private suspend fun completeMatchFinish(
         playerRuns: Int,
@@ -455,9 +757,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun restartSetup() {
         timerJob?.cancel()
+        if (_matchState.value.isMultiplayer) {
+            multiplayerManager.disconnect()
+        }
         _matchState.value = MatchState()
         navigateTo(Screen.MENU)
     }
+
 
     // Commentary generators
     private fun generateBattingCommentary(runs: Int): String {
