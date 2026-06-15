@@ -631,7 +631,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val currentState = _matchState.value
 
             val role = if (currentState.playerRole == PlayerRole.BATTING) ChoiceRole.BATSMAN else ChoiceRole.BOWLER
-            val aiMove = aiEngine.generateAiMove(role, currentState.difficulty)
+            val aiMove = aiEngine.generateAiMove(role, currentState.difficulty, playerStats.value.level)
 
             // Record player move in smart AI memory (ignore 0 timeout moves)
             if (playerMove in 1..6) {

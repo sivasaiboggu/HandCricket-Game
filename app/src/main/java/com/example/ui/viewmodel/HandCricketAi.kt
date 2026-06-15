@@ -16,35 +16,63 @@ class HandCricketAi {
     private val playerBattingFrequencies = mutableMapOf<Int, Int>()
     private val playerBowlingFrequencies = mutableMapOf<Int, Int>()
     
-    // Context-sensitive transitions for Markov predictions (previous move -> next move -> count)
+    // First-order transitions: (previous move -> next move -> count)
     private val battingTransitionFrequencies = mutableMapOf<Int, MutableMap<Int, Int>>()
     private val bowlingTransitionFrequencies = mutableMapOf<Int, MutableMap<Int, Int>>()
     
+    // Second-order transitions: (previous two moves -> next move -> count)
+    private val battingSecondOrderTransitions = mutableMapOf<Pair<Int, Int>, MutableMap<Int, Int>>()
+    private val bowlingSecondOrderTransitions = mutableMapOf<Pair<Int, Int>, MutableMap<Int, Int>>()
+    
     private var lastPlayerBattingMove: Int? = null
     private var lastPlayerBowlingMove: Int? = null
+    private var secondLastPlayerBattingMove: Int? = null
+    private var secondLastPlayerBowlingMove: Int? = null
 
     /**
      * Record the player's choice to train the AI's adaptive model in real-time,
-     * separating their behaviors as a batsman vs. a bowler.
+     * separating their behaviors as a batsman vs. a bowler, and capturing second-order transitions.
      */
     fun recordPlayerMove(move: Int, isPlayerBatting: Boolean) {
         if (move !in 1..6) return
 
         if (isPlayerBatting) {
             playerBattingFrequencies[move] = (playerBattingFrequencies[move] ?: 0) + 1
+            
             val lastMove = lastPlayerBattingMove
             if (lastMove != null) {
+                // First-order transition
                 val transitions = battingTransitionFrequencies.getOrPut(lastMove) { mutableMapOf() }
                 transitions[move] = (transitions[move] ?: 0) + 1
+                
+                // Second-order transition
+                val secondLast = secondLastPlayerBattingMove
+                if (secondLast != null) {
+                    val key = Pair(secondLast, lastMove)
+                    val secondTransitions = battingSecondOrderTransitions.getOrPut(key) { mutableMapOf() }
+                    secondTransitions[move] = (secondTransitions[move] ?: 0) + 1
+                }
             }
+            secondLastPlayerBattingMove = lastPlayerBattingMove
             lastPlayerBattingMove = move
         } else {
             playerBowlingFrequencies[move] = (playerBowlingFrequencies[move] ?: 0) + 1
+            
             val lastMove = lastPlayerBowlingMove
             if (lastMove != null) {
+                // First-order transition
                 val transitions = bowlingTransitionFrequencies.getOrPut(lastMove) { mutableMapOf() }
                 transitions[move] = (transitions[move] ?: 0) + 1
+                
+                // Second-order transition
+                val secondLast = secondLastPlayerBowlingMove
+                if (secondLast != null) {
+                    val key = Pair(secondLast, lastMove)
+                    val secondTransitions = bowlingSecondOrderTransitions.getOrPut(key) { mutableMapOf() }
+                    secondTransitions[move] = (secondTransitions[move] ?: 0) + 1
+                }
             }
+            secondLastPlayerBowlingMove = lastPlayerBowlingMove
             lastPlayerBowlingMove = move
         }
     }
@@ -55,25 +83,30 @@ class HandCricketAi {
     fun resetSession() {
         lastPlayerBattingMove = null
         lastPlayerBowlingMove = null
+        secondLastPlayerBattingMove = null
+        secondLastPlayerBowlingMove = null
         playerBattingFrequencies.clear()
         playerBowlingFrequencies.clear()
         battingTransitionFrequencies.clear()
         bowlingTransitionFrequencies.clear()
+        battingSecondOrderTransitions.clear()
+        bowlingSecondOrderTransitions.clear()
     }
 
     /**
-     * Calculates the AI's move based on role (Batting/Bowling) and Difficulty Level.
+     * Calculates the AI's move based on role (Batting/Bowling), Difficulty Level, and Player's career Level.
      */
-    fun generateAiMove(role: ChoiceRole, difficulty: Difficulty): Int {
+    fun generateAiMove(role: ChoiceRole, difficulty: Difficulty, playerLevel: Int): Int {
         return when (difficulty) {
             Difficulty.EASY -> {
                 // Rookie AI: Completely random choices, very easy to beat.
                 Random.nextInt(1, 7)
             }
             Difficulty.MEDIUM -> {
-                // Professional AI: 50% random, 50% smart prediction using overall move frequencies.
+                // Professional AI: prediction rate scales from 40% up to 75% capped based on playerLevel
+                val predictionRate = minOf(75, 40 + (playerLevel * 3))
                 val randomPercent = Random.nextInt(100)
-                if (randomPercent < 50) {
+                if (randomPercent >= predictionRate) {
                     Random.nextInt(1, 7)
                 } else {
                     if (role == ChoiceRole.BOWLER) {
@@ -93,9 +126,9 @@ class HandCricketAi {
                 }
             }
             Difficulty.MASTERY -> {
-                // Genius AI: 5% random, 95% adaptive Markov prediction.
+                // Genius AI: 3% random, 97% adaptive hybrid prediction (First-order & Second-order Markov).
                 val randomPercent = Random.nextInt(100)
-                if (randomPercent < 5) {
+                if (randomPercent < 3) {
                     return Random.nextInt(1, 7)
                 }
 
@@ -103,42 +136,70 @@ class HandCricketAi {
 
                 if (role == ChoiceRole.BOWLER) {
                     // AI is bowling -> predicts player's batting move to bowl them out
-                    val lastMove = lastPlayerBattingMove
-                    if (lastMove != null) {
-                        val transitions = battingTransitionFrequencies[lastMove]
+                    val last = lastPlayerBattingMove
+                    val secondLast = secondLastPlayerBattingMove
+                    
+                    // 1. Try Second-Order Markov prediction (unlocked at Level 3+)
+                    if (playerLevel >= 3 && secondLast != null && last != null) {
+                        val key = Pair(secondLast, last)
+                        val secondTransitions = battingSecondOrderTransitions[key]
+                        if (!secondTransitions.isNullOrEmpty()) {
+                            predictedPlayerMove = secondTransitions.maxByOrNull { it.value }?.key
+                        }
+                    }
+                    
+                    // 2. Fall back to First-Order Markov prediction
+                    if (predictedPlayerMove == null && last != null) {
+                        val transitions = battingTransitionFrequencies[last]
                         if (!transitions.isNullOrEmpty()) {
                             predictedPlayerMove = transitions.maxByOrNull { it.value }?.key
                         }
                     }
+                    
+                    // 3. Fall back to General overall frequency prediction
                     if (predictedPlayerMove == null && playerBattingFrequencies.isNotEmpty()) {
                         predictedPlayerMove = playerBattingFrequencies.maxByOrNull { it.value }?.key
                     }
                     
-                    // Predict and match player's move
                     predictedPlayerMove ?: Random.nextInt(1, 7)
                 } else {
                     // AI is batting -> predicts player's bowling move to avoid it
-                    val lastMove = lastPlayerBowlingMove
-                    if (lastMove != null) {
-                        val transitions = bowlingTransitionFrequencies[lastMove]
+                    val last = lastPlayerBowlingMove
+                    val secondLast = secondLastPlayerBowlingMove
+                    
+                    // 1. Try Second-Order Markov prediction (unlocked at Level 3+)
+                    if (playerLevel >= 3 && secondLast != null && last != null) {
+                        val key = Pair(secondLast, last)
+                        val secondTransitions = bowlingSecondOrderTransitions[key]
+                        if (!secondTransitions.isNullOrEmpty()) {
+                            predictedPlayerMove = secondTransitions.maxByOrNull { it.value }?.key
+                        }
+                    }
+                    
+                    // 2. Fall back to First-Order Markov prediction
+                    if (predictedPlayerMove == null && last != null) {
+                        val transitions = bowlingTransitionFrequencies[last]
                         if (!transitions.isNullOrEmpty()) {
                             predictedPlayerMove = transitions.maxByOrNull { it.value }?.key
                         }
                     }
+                    
+                    // 3. Fall back to General overall frequency prediction
                     if (predictedPlayerMove == null && playerBowlingFrequencies.isNotEmpty()) {
                         predictedPlayerMove = playerBowlingFrequencies.maxByOrNull { it.value }?.key
                     }
                     
                     val avoidMove = predictedPlayerMove ?: Random.nextInt(1, 7)
-                    // Pick a safe move that is not predicted, using weighted random to avoid predictability.
+                    
+                    // Pick a safe move that is not predicted, prioritizing higher runs dynamically based on playerLevel
                     val safeChoices = (1..6).filter { it != avoidMove }
                     if (safeChoices.isNotEmpty()) {
                         val weights = safeChoices.map { move ->
                             when (move) {
-                                6 -> 6
-                                4 -> 5
-                                5 -> 4
-                                3 -> 4
+                                6 -> 5 + playerLevel
+                                4 -> 4 + playerLevel
+                                5 -> 3 + (playerLevel / 2)
+                                3 -> 3
                                 2 -> 2
                                 1 -> 1
                                 else -> 1
