@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -235,6 +236,33 @@ fun MainMenuScreen(
                         )
                     }
                 }
+
+                // Multiplayer Match Button
+                Button(
+                    onClick = { viewModel.startMultiplayerMatchmaking() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .testTag("play_multiplayer_button"),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF1E40AF),
+                        contentColor = Color.White
+                    ),
+                    shape = RoundedCornerShape(14.dp),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Public, contentDescription = "Online", modifier = Modifier.size(24.dp), tint = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "START MULTIPLAYER DUEL",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
+                    }
+                }
+
 
                 // Grid of side menus
                 Row(

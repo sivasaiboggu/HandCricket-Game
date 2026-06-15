@@ -3,7 +3,9 @@ package com.example.ui.components
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -321,6 +323,49 @@ fun HandSignAnimator(
                     )
                 }
             }
+
+            // 5. Floating Center Battle Verses / Result Badge
+            Box(
+                modifier = Modifier.align(Alignment.Center)
+            ) {
+                if (playerChoice > 0 && aiChoice > 0 && !isShaking) {
+                    if (isOut) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFEF4444), RoundedCornerShape(8.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("OUT!", fontSize = 12.sp, fontWeight = FontWeight.Black, color = Color.White)
+                        }
+                    } else if (isScoreEvent) {
+                        val runsScored = if (playerRole == com.example.ui.viewmodel.PlayerRole.BATTING) playerChoice else aiChoice
+                        Box(
+                            modifier = Modifier
+                                .background(ImmersiveLime, RoundedCornerShape(8.dp))
+                                .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("+$runsScored RUNS", fontSize = 12.sp, fontWeight = FontWeight.Black, color = ImmersiveBackground)
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF1E293B).copy(alpha = 0.9f), CircleShape)
+                            .border(1.5.dp, ImmersiveBorder, CircleShape)
+                            .size(36.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "VS",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -367,7 +412,7 @@ private fun DrawScope.drawHandGesture(
     )
 
     // 3. Draw fingers based on selection
-    if (fingersCount == 0) {
+    if (fingersCount == 0 || fingersCount == 6) {
         // Draw closed fist: Folded finger caps (dots on the palm top edge)
         val numFolded = 4
         val startX = centerX - basePalmWidth * 0.3f
@@ -389,6 +434,21 @@ private fun DrawScope.drawHandGesture(
             radius = fingerThickness * 0.8f,
             center = Offset(thumbX, thumbY)
         )
+        
+        // Handle case 6: Draw extra visual glow ring around the fist
+        if (fingersCount == 6) {
+            drawCircle(
+                color = Color.White.copy(alpha = 0.25f),
+                radius = basePalmWidth * 1.1f,
+                center = Offset(centerX, centerY),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = 4f * scale,
+                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                        floatArrayOf(15f, 15f), 0f
+                    )
+                )
+            )
+        }
     } else {
         // Draw extended fingers
         // Finger indices mapping:
@@ -481,21 +541,6 @@ private fun DrawScope.drawHandGesture(
             drawFoldedFingerDot(thumbStartX, thumbStartY, fingerThickness * 1.1f)
         }
 
-        // Handle case 6: Draw double thumb/extra visual glow on top of 5 fingers
-        if (fingersCount == 6) {
-            // Draw extra glowing ring around the open hand
-            drawCircle(
-                color = Color.White.copy(alpha = 0.25f),
-                radius = baseFingerLength * 1.3f,
-                center = Offset(centerX, centerY - basePalmHeight * 0.1f),
-                style = androidx.compose.ui.graphics.drawscope.Stroke(
-                    width = 4f * scale,
-                    pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
-                        floatArrayOf(15f, 15f), 0f
-                    )
-                )
-            )
-        }
     }
 }
 

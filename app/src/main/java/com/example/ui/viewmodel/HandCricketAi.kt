@@ -12,39 +12,53 @@ enum class ChoiceRole {
 
 class HandCricketAi {
     
-    // Overall frequencies of player inputs (1 to 6)
-    private val playerMoveFrequencies = mutableMapOf<Int, Int>()
+    // Separate frequencies of player moves when batting vs when bowling
+    private val playerBattingFrequencies = mutableMapOf<Int, Int>()
+    private val playerBowlingFrequencies = mutableMapOf<Int, Int>()
     
-    // Context-sensitive transition counts for Markov predictive scoring
-    // Key is previous move (1-6), value is map of subsequent moves and their counts
-    private val transitionFrequencies = mutableMapOf<Int, MutableMap<Int, Int>>()
+    // Context-sensitive transitions for Markov predictions (previous move -> next move -> count)
+    private val battingTransitionFrequencies = mutableMapOf<Int, MutableMap<Int, Int>>()
+    private val bowlingTransitionFrequencies = mutableMapOf<Int, MutableMap<Int, Int>>()
     
-    private var lastPlayerMove: Int? = null
+    private var lastPlayerBattingMove: Int? = null
+    private var lastPlayerBowlingMove: Int? = null
 
     /**
-     * Record the player's choice to train the AI's adaptive model in real-time.
+     * Record the player's choice to train the AI's adaptive model in real-time,
+     * separating their behaviors as a batsman vs. a bowler.
      */
-    fun recordPlayerMove(move: Int) {
+    fun recordPlayerMove(move: Int, isPlayerBatting: Boolean) {
         if (move !in 1..6) return
 
-        playerMoveFrequencies[move] = (playerMoveFrequencies[move] ?: 0) + 1
-
-        val lastMove = lastPlayerMove
-        if (lastMove != null) {
-            val transitions = transitionFrequencies.getOrPut(lastMove) { mutableMapOf() }
-            transitions[move] = (transitions[move] ?: 0) + 1
+        if (isPlayerBatting) {
+            playerBattingFrequencies[move] = (playerBattingFrequencies[move] ?: 0) + 1
+            val lastMove = lastPlayerBattingMove
+            if (lastMove != null) {
+                val transitions = battingTransitionFrequencies.getOrPut(lastMove) { mutableMapOf() }
+                transitions[move] = (transitions[move] ?: 0) + 1
+            }
+            lastPlayerBattingMove = move
+        } else {
+            playerBowlingFrequencies[move] = (playerBowlingFrequencies[move] ?: 0) + 1
+            val lastMove = lastPlayerBowlingMove
+            if (lastMove != null) {
+                val transitions = bowlingTransitionFrequencies.getOrPut(lastMove) { mutableMapOf() }
+                transitions[move] = (transitions[move] ?: 0) + 1
+            }
+            lastPlayerBowlingMove = move
         }
-        
-        lastPlayerMove = move
     }
 
     /**
-     * Resets sequence files at the start of a match to keep prediction fresh.
+     * Resets sequence files at the start of a match to keep predictions fresh.
      */
     fun resetSession() {
-        lastPlayerMove = null
-        playerMoveFrequencies.clear()
-        transitionFrequencies.clear()
+        lastPlayerBattingMove = null
+        lastPlayerBowlingMove = null
+        playerBattingFrequencies.clear()
+        playerBowlingFrequencies.clear()
+        battingTransitionFrequencies.clear()
+        bowlingTransitionFrequencies.clear()
     }
 
     /**
@@ -53,67 +67,72 @@ class HandCricketAi {
     fun generateAiMove(role: ChoiceRole, difficulty: Difficulty): Int {
         return when (difficulty) {
             Difficulty.EASY -> {
-                // Completely random 1..6
+                // Rookie AI: Completely random choices, very easy to beat.
                 Random.nextInt(1, 7)
             }
             Difficulty.MEDIUM -> {
-                // 70% random, 30% smart bias towards player's overall favorite move (when bowling)
-                // or avoiding player's bowling hot targets (when batting)
+                // Professional AI: 60% random, 40% smart prediction using overall move frequencies.
                 val randomPercent = Random.nextInt(100)
-                if (randomPercent < 70 || playerMoveFrequencies.isEmpty()) {
+                if (randomPercent < 60) {
                     Random.nextInt(1, 7)
                 } else {
-                    val favoriteMove = playerMoveFrequencies.maxByOrNull { it.value }?.key ?: Random.nextInt(1, 7)
                     if (role == ChoiceRole.BOWLER) {
-                        // AI is bowling, wants to guess the batsman's move to get them out
-                        favoriteMove
+                        // AI is bowling -> wants to guess player's batting choice.
+                        val predictedMove = playerBattingFrequencies.maxByOrNull { it.value }?.key
+                        predictedMove ?: Random.nextInt(1, 7)
                     } else {
-                        // AI is batting, wants to avoid being matched by player's bowler tendencies
-                        // Pick something that is NOT the player's favorite bowling guess
-                        val safeChoices = (1..6).filter { it != favoriteMove }
-                        if (safeChoices.isNotEmpty()) safeChoices.random() else Random.nextInt(1, 7)
+                        // AI is batting -> wants to avoid player's bowling guess.
+                        val avoidMove = playerBowlingFrequencies.maxByOrNull { it.value }?.key
+                        if (avoidMove != null) {
+                            val safeChoices = (1..6).filter { it != avoidMove }
+                            if (safeChoices.isNotEmpty()) safeChoices.random() else Random.nextInt(1, 7)
+                        } else {
+                            Random.nextInt(1, 7)
+                        }
                     }
                 }
             }
             Difficulty.MASTERY -> {
-                // Adaptive Mastery Mode: use 1st-level Markov prediction block or base frequencies
+                // Genius AI: 12% random, 88% adaptive Markov prediction.
                 val randomPercent = Random.nextInt(100)
-                
-                // 40% of the time, make a classic random choice to avoid being entirely deterministic
-                if (randomPercent < 40) {
+                if (randomPercent < 12) {
                     return Random.nextInt(1, 7)
                 }
 
-                val lastMove = lastPlayerMove
-                var predictedMove: Int? = null
-
-                if (lastMove != null) {
-                    // Look up transition context (what player usually plays after lastMove)
-                    val transitions = transitionFrequencies[lastMove]
-                    if (!transitions.isNullOrEmpty()) {
-                        predictedMove = transitions.maxByOrNull { it.value }?.key
-                    }
-                }
-
-                // If transition forecast is null, fall back to global favorite move
-                if (predictedMove == null && playerMoveFrequencies.isNotEmpty()) {
-                    predictedMove = playerMoveFrequencies.maxByOrNull { it.value }?.key
-                }
-
-                // Default fallback if no data recorded yet
-                val prediction = predictedMove ?: Random.nextInt(1, 7)
+                var predictedPlayerMove: Int? = null
 
                 if (role == ChoiceRole.BOWLER) {
-                    // AI is bowling -> wants to match player's batting choice to bowl them OUT
-                    prediction
+                    // AI is bowling -> predicts player's batting move to bowl them out
+                    val lastMove = lastPlayerBattingMove
+                    if (lastMove != null) {
+                        val transitions = battingTransitionFrequencies[lastMove]
+                        if (!transitions.isNullOrEmpty()) {
+                            predictedPlayerMove = transitions.maxByOrNull { it.value }?.key
+                        }
+                    }
+                    if (predictedPlayerMove == null && playerBattingFrequencies.isNotEmpty()) {
+                        predictedPlayerMove = playerBattingFrequencies.maxByOrNull { it.value }?.key
+                    }
+                    
+                    // Predict and match player's move
+                    predictedPlayerMove ?: Random.nextInt(1, 7)
                 } else {
-                    // AI is batting -> wants to avoid the player's bowling choice
-                    // AI tries to predict what player will throw as bowler, and plays something else
-                    // Also batsmen try to score high run values like 4 and 6
-                    val avoidMove = prediction
-                    val highRunsWeighted = listOf(4, 6, 3, 5, 2, 1)
-                    val candidate = highRunsWeighted.firstOrNull { it != avoidMove } ?: Random.nextInt(1, 7)
-                    candidate
+                    // AI is batting -> predicts player's bowling move to avoid it
+                    val lastMove = lastPlayerBowlingMove
+                    if (lastMove != null) {
+                        val transitions = bowlingTransitionFrequencies[lastMove]
+                        if (!transitions.isNullOrEmpty()) {
+                            predictedPlayerMove = transitions.maxByOrNull { it.value }?.key
+                        }
+                    }
+                    if (predictedPlayerMove == null && playerBowlingFrequencies.isNotEmpty()) {
+                        predictedPlayerMove = playerBowlingFrequencies.maxByOrNull { it.value }?.key
+                    }
+                    
+                    val avoidMove = predictedPlayerMove ?: Random.nextInt(1, 7)
+                    // Pick a safe move that is not predicted, prioritizing higher scoring options.
+                    val safeHighRuns = listOf(4, 6, 3, 5, 2, 1).filter { it != avoidMove }
+                    if (safeHighRuns.isNotEmpty()) safeHighRuns.first() else Random.nextInt(1, 7)
                 }
             }
         }

@@ -5,6 +5,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -28,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.components.HandChoiceButton
 import com.example.ui.components.HandSignAnimator
+import com.example.ui.components.CelebrationOverlay
 import com.example.ui.viewmodel.GameViewModel
 import com.example.ui.viewmodel.MatchPhase
 import com.example.ui.viewmodel.PlayerRole
@@ -96,7 +99,7 @@ fun MatchPlayScreen(
                     }
                 }
 
-                // 2. Hand Sign Animation Visualizer
+                // 2. Hand Sign Animation Visualizer (Fixed height to prevent squishing)
                 HandSignAnimator(
                     playerChoice = state.lastPlayerMove,
                     aiChoice = state.lastAiMove,
@@ -106,13 +109,10 @@ fun MatchPlayScreen(
                     playerRole = state.playerRole,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
-                        .padding(vertical = 8.dp)
+                        .height(200.dp)
+                        .padding(vertical = 6.dp)
                         .clip(RoundedCornerShape(16.dp))
                 )
-
-                // 3. Choice Duelling Indicator (You vs AI move display)
-                InningsDuelPanel(state = state)
 
                 // 4. Live ball-by-ball commentary
                 CommentaryBox(commentary = state.commentText)
@@ -122,6 +122,9 @@ fun MatchPlayScreen(
                     TimerProgressBar(secondsRemaining = state.timerValue)
                     Spacer(modifier = Modifier.height(6.dp))
                     FingerDecisionDeck(
+                        ballsBowled = state.ballsBowled,
+                        currentInnings = state.currentInnings,
+                        isActionShaking = state.isActionShaking,
                         onPlayBall = { choice ->
                             viewModel.playBall(choice)
                         }
@@ -153,6 +156,16 @@ fun MatchPlayScreen(
                     onBackToMenu = onBackToMenu
                 )
             }
+
+            // 7. Full-screen Celebrations Overlay (Confetti for 6s, Sparks/Shockwave for Wickets)
+            val isSix = state.isScoreEvent && (
+                (state.playerRole == PlayerRole.BATTING && state.lastPlayerMove == 6) ||
+                (state.playerRole == PlayerRole.BOWLING && state.lastAiMove == 6)
+            )
+            CelebrationOverlay(
+                isSix = isSix,
+                isWicket = state.isOutEvent
+            )
         }
     }
 }
@@ -234,7 +247,7 @@ fun ScoreboardWidget(state: MatchState) {
                 // YOU score block
                 Column {
                     Text(
-                        text = "YOU",
+                        text = state.myPlayerName.uppercase(),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White.copy(alpha = 0.4f)
@@ -258,7 +271,7 @@ fun ScoreboardWidget(state: MatchState) {
                 // AI score block
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = "AI DEFENDER",
+                        text = state.opponentPlayerName.uppercase(),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White.copy(alpha = 0.4f)
@@ -288,19 +301,31 @@ fun ScoreboardWidget(state: MatchState) {
             val currentOverNo = state.ballsBowled / 6
             val currentBallNo = state.ballsBowled % 6
             
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "BALL-BY-BALL TIMELINE",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White.copy(alpha = 0.4f),
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = "OVERS: $currentOverNo.$currentBallNo / ${state.matchOversLimit}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+                }
+                
                 RecentBallsTimeline(recentBalls = state.recentBalls)
-
-                Text(
-                    text = "OVERS: $currentOverNo.$currentBallNo / ${state.matchOversLimit}",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White
-                )
             }
         }
     }
@@ -308,20 +333,87 @@ fun ScoreboardWidget(state: MatchState) {
 
 @Composable
 fun RecentBallsTimeline(recentBalls: List<String>) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        recentBalls.forEach { res ->
-            BallTimelineChip(result = res)
+    val overs = recentBalls.chunked(6)
+    val listState = rememberLazyListState()
+
+    // Automatically scroll to the latest over whenever a new ball is bowled
+    LaunchedEffect(recentBalls.size) {
+        if (overs.isNotEmpty()) {
+            listState.animateScrollToItem(overs.size - 1)
         }
-        if (recentBalls.isEmpty()) {
-            Text(
-                text = "No balls bowled yet",
-                fontSize = 10.sp,
-                color = Color.White.copy(alpha = 0.3f),
-                fontWeight = FontWeight.Bold
-            )
+    }
+    
+    if (recentBalls.isEmpty()) {
+        Text(
+            text = "No balls bowled yet",
+            fontSize = 11.sp,
+            color = Color.White.copy(alpha = 0.3f),
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(vertical = 4.dp)
+        )
+    } else {
+        LazyRow(
+            state = listState,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(overs.size) { overIndex ->
+                val overBalls = overs[overIndex]
+                
+                // Calculate over runs and wickets
+                var overRuns = 0
+                var overWickets = 0
+                overBalls.forEach { res ->
+                    if (res == "W") {
+                        overWickets++
+                    } else {
+                        overRuns += res.toIntOrNull() ?: 0
+                    }
+                }
+                
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.05f)),
+                    border = BorderStroke(1.dp, ImmersiveBorder.copy(alpha = 0.15f)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Row(
+                            modifier = Modifier.width(135.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "OVER ${overIndex + 1}",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black,
+                                color = ImmersiveLime,
+                                letterSpacing = 0.5.sp
+                            )
+                            Text(
+                                text = "$overRuns R • $overWickets W",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White.copy(alpha = 0.6f)
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            overBalls.forEach { res ->
+                                BallTimelineChip(result = res)
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -567,8 +659,19 @@ fun CommentaryBox(commentary: String) {
 
 @Composable
 fun FingerDecisionDeck(
+    ballsBowled: Int,
+    currentInnings: Int,
+    isActionShaking: Boolean,
     onPlayBall: (Int) -> Unit
 ) {
+    var hasClickedThisBall by remember { mutableStateOf(false) }
+
+    LaunchedEffect(ballsBowled, currentInnings) {
+        hasClickedThisBall = false
+    }
+
+    val enabled = !isActionShaking && !hasClickedThisBall
+
     Column {
         Text(
             text = "TAP TO SHOW RUN FINGERS",
@@ -583,14 +686,14 @@ fun FingerDecisionDeck(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(modifier = Modifier.weight(1f)) {
-                    HandChoiceButton(1, onClick = { onPlayBall(1) }, modifier = Modifier.weight(1f))
-                    HandChoiceButton(2, onClick = { onPlayBall(2) }, modifier = Modifier.weight(1f))
-                    HandChoiceButton(3, onClick = { onPlayBall(3) }, modifier = Modifier.weight(1f))
+                    HandChoiceButton(1, onClick = { hasClickedThisBall = true; onPlayBall(1) }, enabled = enabled, modifier = Modifier.weight(1f))
+                    HandChoiceButton(2, onClick = { hasClickedThisBall = true; onPlayBall(2) }, enabled = enabled, modifier = Modifier.weight(1f))
+                    HandChoiceButton(3, onClick = { hasClickedThisBall = true; onPlayBall(3) }, enabled = enabled, modifier = Modifier.weight(1f))
                 }
                 Row(modifier = Modifier.weight(1f)) {
-                    HandChoiceButton(4, onClick = { onPlayBall(4) }, modifier = Modifier.weight(1f))
-                    HandChoiceButton(5, onClick = { onPlayBall(5) }, modifier = Modifier.weight(1f))
-                    HandChoiceButton(6, onClick = { onPlayBall(6) }, modifier = Modifier.weight(1f))
+                    HandChoiceButton(4, onClick = { hasClickedThisBall = true; onPlayBall(4) }, enabled = enabled, modifier = Modifier.weight(1f))
+                    HandChoiceButton(5, onClick = { hasClickedThisBall = true; onPlayBall(5) }, enabled = enabled, modifier = Modifier.weight(1f))
+                    HandChoiceButton(6, onClick = { hasClickedThisBall = true; onPlayBall(6) }, enabled = enabled, modifier = Modifier.weight(1f))
                 }
             }
         }
