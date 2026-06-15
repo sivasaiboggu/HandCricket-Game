@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "568306922415",
+    "project_id": "hand-cricket-game-3b96e",
+    "storage_bucket": "hand-cricket-game-3b96e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:568306922415:android:ef1eabd98493693143b55a",
+        "android_client_info": {
+          "package_name": "com.sivasaiboggu.handcricket"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC4BBx78ev_xcc4_ARxM5FJjutG63BngXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
