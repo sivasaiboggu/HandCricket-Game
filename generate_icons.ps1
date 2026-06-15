@@ -3,7 +3,7 @@ Add-Type -AssemblyName System.Drawing
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (-not $scriptDir) { $scriptDir = "." }
 
-$sourcePath = Join-Path $scriptDir "assets\app_icon_source.png"
+$sourcePath = Join-Path $scriptDir "assets\app_icon_trimmed.png"
 $baseDir = Join-Path $scriptDir "app\src\main\res"
 
 if (-not (Test-Path $sourcePath)) {
@@ -73,4 +73,4 @@ foreach ($folder in $sizes.Keys) {
 }
 
 $srcImage.Dispose()
-Write-Host "Launcher icons generated successfully from local source assets/app_icon_source.png!"
+Write-Host "Launcher icons generated successfully from local source assets/app_icon_trimmed.png!"

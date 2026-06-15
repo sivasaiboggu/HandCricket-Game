@@ -92,6 +92,25 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private var mpObserverJob: kotlinx.coroutines.Job? = null
     private var isResolvingMpBall = false
 
+    private val _currentScreen = MutableStateFlow(Screen.MENU)
+    val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
+
+    private val _matchState = MutableStateFlow(MatchState())
+    val matchState: StateFlow<MatchState> = _matchState.asStateFlow()
+
+    // Toss logic state
+    private val _tossWinner = MutableStateFlow<String?>(null) // "PLAYER" or "AI"
+    val tossWinner: StateFlow<String?> = _tossWinner.asStateFlow()
+    
+    private val _tossResult = MutableStateFlow<String>("") // "HEADS" or "TAILS"
+    val tossResult: StateFlow<String> = _tossResult.asStateFlow()
+
+    private val _isCoinSpinning = MutableStateFlow(false)
+    val isCoinSpinning: StateFlow<Boolean> = _isCoinSpinning.asStateFlow()
+
+    private val aiEngine = HandCricketAi()
+    private var timerJob: kotlinx.coroutines.Job? = null
+
     init {
         val database = AppDatabase.getDatabase(application)
         repository = GameRepository(database.gameDao)
@@ -123,25 +142,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
     }
-
-    private val _currentScreen = MutableStateFlow(Screen.MENU)
-    val currentScreen: StateFlow<Screen> = _currentScreen.asStateFlow()
-
-    private val _matchState = MutableStateFlow(MatchState())
-    val matchState: StateFlow<MatchState> = _matchState.asStateFlow()
-
-    // Toss logic state
-    private val _tossWinner = MutableStateFlow<String?>(null) // "PLAYER" or "AI"
-    val tossWinner: StateFlow<String?> = _tossWinner.asStateFlow()
-    
-    private val _tossResult = MutableStateFlow<String>("") // "HEADS" or "TAILS"
-    val tossResult: StateFlow<String> = _tossResult.asStateFlow()
-
-    private val _isCoinSpinning = MutableStateFlow(false)
-    val isCoinSpinning: StateFlow<Boolean> = _isCoinSpinning.asStateFlow()
-
-    private val aiEngine = HandCricketAi()
-    private var timerJob: kotlinx.coroutines.Job? = null
 
     fun startCountdownTimer() {
         timerJob?.cancel()
