@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.sp
 import com.example.ui.theme.ImmersiveLime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -69,8 +70,8 @@ fun CelebrationOverlay(
                             CelebrationParticle(
                                 x = 0f,
                                 y = height,
-                                vx = (10..22).random().toFloat(),
-                                vy = -(20..42).random().toFloat(),
+                                vx = (12..25).random().toFloat(),
+                                vy = -(24..46).random().toFloat(),
                                 color = colors.random(),
                                 size = (16..32).random().toFloat(),
                                 rotationSpeed = (-8..8).random().toFloat(),
@@ -85,8 +86,8 @@ fun CelebrationOverlay(
                             CelebrationParticle(
                                 x = width,
                                 y = height,
-                                vx = -(10..22).random().toFloat(),
-                                vy = -(20..42).random().toFloat(),
+                                vx = -(12..25).random().toFloat(),
+                                vy = -(24..46).random().toFloat(),
                                 color = colors.random(),
                                 size = (16..32).random().toFloat(),
                                 rotationSpeed = (-8..8).random().toFloat(),
@@ -96,12 +97,30 @@ fun CelebrationOverlay(
                     }
                     particles = newList
 
-                    // Text bounce animation
+                    // Concurrent job to run particle updates at 60fps
+                    val physicsJob = launch {
+                        val gravity = 0.7f
+                        while (isActive && particles.isNotEmpty()) {
+                            particles = particles.map { p ->
+                                p.copy(
+                                    x = p.x + p.vx,
+                                    y = p.y + p.vy,
+                                    vy = p.vy + gravity,
+                                    rotation = p.rotation + p.rotationSpeed
+                                )
+                            }.filter { p ->
+                                p.y < height + 50 && p.x > -100 && p.x < width + 100
+                            }
+                            delay(16)
+                        }
+                    }
+
+                    // Text entrance bounce
                     textScale = 0f
                     textAlpha = 1f
                     animate(
                         initialValue = 0f,
-                        targetValue = 1f,
+                        targetValue = 1.0f,
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessLow
@@ -110,9 +129,9 @@ fun CelebrationOverlay(
                         textScale = value
                     }
 
-                    delay(1200)
+                    delay(1100)
 
-                    // Fade out text
+                    // Smooth fade out
                     animate(
                         initialValue = 1f,
                         targetValue = 0f,
@@ -120,6 +139,7 @@ fun CelebrationOverlay(
                     ) { value, _ ->
                         textAlpha = value
                     }
+                    physicsJob.cancel()
                 } finally {
                     activeCelebration = null
                     particles = emptyList()
@@ -157,6 +177,23 @@ fun CelebrationOverlay(
                     }
                     particles = newList
 
+                    // Concurrent job to run particle updates at 60fps
+                    val physicsJob = launch {
+                        while (isActive && particles.isNotEmpty()) {
+                            particles = particles.map { p ->
+                                p.copy(
+                                    x = p.x + p.vx,
+                                    y = p.y + p.vy,
+                                    vx = p.vx * 0.95f,
+                                    vy = p.vy * 0.95f + 0.15f
+                                )
+                            }.filter { p ->
+                                p.y < height + 50 && p.x > -100 && p.x < width + 100
+                            }
+                            delay(16)
+                        }
+                    }
+
                     // Text pop animation
                     textScale = 0f
                     textAlpha = 1f
@@ -171,7 +208,7 @@ fun CelebrationOverlay(
                         textScale = value
                     }
 
-                    delay(1200)
+                    delay(1100)
 
                     // Fade out text
                     animate(
@@ -181,41 +218,10 @@ fun CelebrationOverlay(
                     ) { value, _ ->
                         textAlpha = value
                     }
+                    physicsJob.cancel()
                 } finally {
                     activeCelebration = null
                     particles = emptyList()
-                }
-            }
-        }
-
-        // Particle update loop (60fps simulation)
-        if (particles.isNotEmpty()) {
-            LaunchedEffect(particles) {
-                val gravity = 0.7f
-                val wind = 0.05f
-                while (isActive && particles.isNotEmpty()) {
-                    particles = particles.map { p ->
-                        if (p.isConfetti) {
-                            // Confetti falls down with gravity and rotates
-                            p.copy(
-                                x = p.x + p.vx,
-                                y = p.y + p.vy,
-                                vy = p.vy + gravity,
-                                rotation = p.rotation + p.rotationSpeed
-                            )
-                        } else {
-                            // Sparks expand outwards and slowly fade/slow down
-                            p.copy(
-                                x = p.x + p.vx,
-                                y = p.y + p.vy,
-                                vx = p.vx * 0.96f,
-                                vy = p.vy * 0.96f + 0.15f
-                            )
-                        }
-                    }.filter { p ->
-                        p.y < height + 50 && p.x > -100 && p.x < width + 100
-                    }
-                    delay(16)
                 }
             }
         }

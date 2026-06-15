@@ -430,7 +430,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
 
-            delay(1200) // Keep reveal visible
+            delay(1800) // Keep reveal visible to allow celebration overlay to finish smoothly
 
             // Clear visual screen flash
             _matchState.update {
@@ -599,7 +599,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
 
-            delay(1200)
+            delay(1800)
 
             // Clear visual screens
             _matchState.update {
