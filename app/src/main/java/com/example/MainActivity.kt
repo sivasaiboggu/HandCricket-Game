@@ -19,6 +19,8 @@ import com.example.ui.screens.MatchPlayScreen
 import com.example.ui.screens.StatsAndHistoryScreen
 import com.example.ui.screens.MultiplayerMatchmakingScreen
 import com.example.ui.screens.ProfileSetupScreen
+import com.example.ui.screens.SignInScreen
+import com.example.ui.screens.SignUpScreen
 
 
 
@@ -90,9 +92,18 @@ class MainActivity : ComponentActivity() {
                                 onBack = { viewModel.navigateTo(Screen.MENU) }
                             )
                         }
-
-
-
+                        Screen.SIGN_IN -> {
+                            SignInScreen(
+                                viewModel = viewModel,
+                                onNavigateToSignUp = { viewModel.navigateTo(Screen.SIGN_UP) }
+                            )
+                        }
+                        Screen.SIGN_UP -> {
+                            SignUpScreen(
+                                viewModel = viewModel,
+                                onNavigateToSignIn = { viewModel.navigateTo(Screen.SIGN_IN) }
+                            )
+                        }
                     }
                 }
             }

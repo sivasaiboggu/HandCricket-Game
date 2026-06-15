@@ -36,6 +36,8 @@ import com.example.ui.theme.ImmersiveBorder
 import com.example.ui.theme.ImmersiveLime
 import com.example.ui.theme.ImmersiveTextPrimary
 import com.example.ui.theme.ImmersiveTextSecondary
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 
 @Composable
@@ -46,6 +48,8 @@ fun MainMenuScreen(
     onOpenAchievements: () -> Unit
 ) {
     val stats by viewModel.playerStats.collectAsState()
+    val state by viewModel.matchState.collectAsState()
+    val context = LocalContext.current
 
     // Smooth ambient background elements
     val backgroundBrush = Brush.verticalGradient(
@@ -156,10 +160,10 @@ fun MainMenuScreen(
                     ) {
                         Column {
                             Text(
-                                text = "OFFLINE CAREER",
-                                fontSize = 10.sp,
+                                text = if (state.isOfflineMode) "OFFLINE CAREER" else "ONLINE PROFILE: ${state.myPlayerName}",
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = ImmersiveLime
+                                color = if (state.isOfflineMode) Color.Gray else ImmersiveLime
                             )
                             Text(
                                 text = "Rank Star / Lvl ${stats.level}",
@@ -168,18 +172,22 @@ fun MainMenuScreen(
                                 color = Color.White
                             )
                         }
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .background(ImmersiveBorder, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null,
-                                tint = ImmersiveLime,
-                                modifier = Modifier.size(24.dp)
-                            )
+                        
+                        // Action buttons inside profile card
+                        if (state.isOfflineMode) {
+                            TextButton(
+                                onClick = { viewModel.signOut() },
+                                colors = ButtonDefaults.textButtonColors(contentColor = ImmersiveLime)
+                            ) {
+                                Text("SIGN IN", fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            TextButton(
+                                onClick = { viewModel.signOut() },
+                                colors = ButtonDefaults.textButtonColors(contentColor = Color(0xFFEF4444))
+                            ) {
+                                Text("LOG OUT", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
 
@@ -239,26 +247,37 @@ fun MainMenuScreen(
 
                 // Multiplayer Match Button
                 Button(
-                    onClick = { viewModel.startMultiplayerMatchmaking() },
+                    onClick = {
+                        if (state.isOfflineMode) {
+                            Toast.makeText(context, "Multiplayer requires signing in online!", Toast.LENGTH_LONG).show()
+                        } else {
+                            viewModel.startMultiplayerMatchmaking()
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(60.dp)
                         .testTag("play_multiplayer_button"),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF1E40AF),
+                        containerColor = if (state.isOfflineMode) Color(0xFF334155) else Color(0xFF1E40AF),
                         contentColor = Color.White
                     ),
                     shape = RoundedCornerShape(14.dp),
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Public, contentDescription = "Online", modifier = Modifier.size(24.dp), tint = Color.White)
+                        Icon(
+                            imageVector = Icons.Default.Public, 
+                            contentDescription = "Online", 
+                            modifier = Modifier.size(24.dp), 
+                            tint = if (state.isOfflineMode) Color.Gray else Color.White
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "START MULTIPLAYER DUEL",
+                            text = if (state.isOfflineMode) "MULTIPLAYER LOCKED" else "START MULTIPLAYER DUEL",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Black,
-                            color = Color.White
+                            color = if (state.isOfflineMode) Color.Gray else Color.White
                         )
                     }
                 }

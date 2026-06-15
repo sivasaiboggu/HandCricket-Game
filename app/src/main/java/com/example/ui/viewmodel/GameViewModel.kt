@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
 import com.example.data.MultiplayerManager
+import com.example.data.SecurityHelper
 import com.example.data.MultiplayerStatus
 import com.example.data.OnlineRoom
 import com.example.data.model.Achievement
@@ -22,7 +23,7 @@ import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 enum class Screen {
-    MENU, CONFIG, TOSS, PLAY, STATS, ACHIEVEMENTS, MULTIPLAYER_MATCHMAKING, PROFILE_SETUP
+    MENU, CONFIG, TOSS, PLAY, STATS, ACHIEVEMENTS, MULTIPLAYER_MATCHMAKING, PROFILE_SETUP, SIGN_IN, SIGN_UP
 }
 
 
@@ -77,7 +78,8 @@ data class MatchState(
     val multiplayerStatus: MultiplayerStatus = MultiplayerStatus.UNINITIALIZED,
     val roomId: String = "",
     val myPlayerName: String = "YOU",
-    val opponentPlayerName: String = "AI DEFENDER"
+    val opponentPlayerName: String = "AI DEFENDER",
+    val isOfflineMode: Boolean = false
 )
 
 
@@ -140,6 +142,25 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             multiplayerManager.status.collect { status ->
                 _matchState.update { it.copy(multiplayerStatus = status) }
             }
+        }
+
+        // Initialize Authentication State and navigate accordingly
+        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        if (currentUser != null) {
+            val secureName = SecurityHelper.secureGet(application, "username", "")
+            if (secureName.isNotEmpty()) {
+                _matchState.update { 
+                    it.copy(
+                        myPlayerName = secureName, 
+                        isOfflineMode = false
+                    ) 
+                }
+                _currentScreen.value = Screen.MENU
+            } else {
+                _currentScreen.value = Screen.PROFILE_SETUP
+            }
+        } else {
+            _currentScreen.value = Screen.SIGN_IN
         }
     }
 
@@ -230,10 +251,129 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         startCountdownTimer()
     }
 
+    // Authentication & Profile Setup helper methods
+    fun signInWithEmail(email: String, password: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        auth.signInWithEmailAndPassword(email, password)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val uid = auth.currentUser?.uid ?: ""
+                    val dbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users").child(uid)
+                    dbRef.child("username").get().addOnCompleteListener { dbTask ->
+                        val username = dbTask.result?.value as? String ?: email.substringBefore("@")
+                        // Save securely locally
+                        com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
+                        _matchState.update { 
+                            it.copy(
+                                myPlayerName = username,
+                                isOfflineMode = false
+                            ) 
+                        }
+                        navigateTo(Screen.MENU)
+                        onSuccess()
+                    }
+                } else {
+                    onError(task.exception?.localizedMessage ?: "Sign-in failed")
+                }
+            }
+    }
+
+    fun signUpWithEmail(username: String, email: String, password: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        auth.createUserWithEmailAndPassword(email, password)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val uid = auth.currentUser?.uid ?: ""
+                    val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+                    val userMap = mapOf("username" to username)
+                    
+                    database.getReference("users").child(uid).setValue(userMap)
+                        .addOnCompleteListener { dbTask ->
+                            if (dbTask.isSuccessful) {
+                                // Save securely locally
+                                com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
+                                _matchState.update { 
+                                    it.copy(
+                                        myPlayerName = username,
+                                        isOfflineMode = false
+                                    ) 
+                                }
+                                navigateTo(Screen.MENU)
+                                onSuccess()
+                            } else {
+                                onError(dbTask.exception?.localizedMessage ?: "Failed to write user profile to database")
+                            }
+                        }
+                } else {
+                    onError(task.exception?.localizedMessage ?: "Registration failed")
+                }
+            }
+    }
+
+    fun signInWithGoogleSimulated(username: String, email: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        auth.signInAnonymously().addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val uid = auth.currentUser?.uid ?: ""
+                val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+                val userMap = mapOf(
+                    "username" to username,
+                    "email" to email,
+                    "provider" to "google"
+                )
+                database.getReference("users").child(uid).setValue(userMap)
+                    .addOnCompleteListener { dbTask ->
+                        if (dbTask.isSuccessful) {
+                            com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
+                            _matchState.update { 
+                                it.copy(
+                                    myPlayerName = username,
+                                    isOfflineMode = false
+                                ) 
+                            }
+                            navigateTo(Screen.MENU)
+                            onSuccess()
+                        } else {
+                            onError("Failed to setup Google profile")
+                        }
+                    }
+            } else {
+                onError(task.exception?.localizedMessage ?: "Google Sign-in failed")
+            }
+        }
+    }
+
+    fun playOfflineMode() {
+        com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+        com.example.data.SecurityHelper.clearSecureCache(getApplication())
+        _matchState.update { 
+            it.copy(
+                myPlayerName = "GUEST ATHLETE",
+                isOfflineMode = true
+            ) 
+        }
+        navigateTo(Screen.MENU)
+    }
+
+    fun signOut() {
+        com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+        com.example.data.SecurityHelper.clearSecureCache(getApplication())
+        _matchState.update { 
+            it.copy(
+                myPlayerName = "YOU",
+                isOfflineMode = false
+            ) 
+        }
+        navigateTo(Screen.SIGN_IN)
+    }
+
     // Multiplayer Matchmaking
     fun startMultiplayerMatchmaking() {
-        val prefs = getApplication<Application>().getSharedPreferences("hand_cricket_prefs", android.content.Context.MODE_PRIVATE)
-        val cachedName = prefs.getString("username", "") ?: ""
+        if (_matchState.value.isOfflineMode) {
+            // Cannot start matchmaking in offline mode!
+            return
+        }
+        val cachedName = com.example.data.SecurityHelper.secureGet(getApplication(), "username", "")
         
         if (cachedName.isEmpty()) {
             navigateTo(Screen.PROFILE_SETUP)
@@ -248,39 +388,58 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val myRole = if (multiplayerManager.myPlayerNum == 1) PlayerRole.BATTING else PlayerRole.BOWLING
             val oppName = if (multiplayerManager.myPlayerNum == 1) room.player2Name else room.player1Name
             
+            // Populate matching info first so visual match ticker slows down and highlights opponent name
             _matchState.update {
                 it.copy(
-                    phase = MatchPhase.INNINGS_1,
-                    currentInnings = 1,
-                    playerRole = myRole,
-                    playerRuns = 0,
-                    playerWickets = 0,
-                    aiRuns = 0,
-                    aiWickets = 0,
-                    ballsBowled = 0,
-                    target = null,
-                    isMultiplayer = true,
-                    myPlayerNum = multiplayerManager.myPlayerNum,
-                    roomId = room.roomId,
                     myPlayerName = username,
                     opponentPlayerName = if (oppName.isEmpty()) "OPPONENT" else oppName,
-                    commentText = if (multiplayerManager.myPlayerNum == 1) {
-                        "Match Found! You are batting first. Choose your number!"
-                    } else {
-                        "Match Found! You are bowling first. Guess the opponent's number!"
-                    },
-                    recentBalls = emptyList()
+                    myPlayerNum = multiplayerManager.myPlayerNum,
+                    roomId = room.roomId,
+                    isMultiplayer = true
                 )
             }
-            navigateTo(Screen.PLAY)
-            startCountdownTimer()
-            observeMultiplayerRoom(username)
+            
+            // Allow 2.2 seconds for matchmaking visual animations on UI before starting play
+            viewModelScope.launch {
+                delay(2200)
+                
+                _matchState.update {
+                    it.copy(
+                        phase = MatchPhase.INNINGS_1,
+                        currentInnings = 1,
+                        playerRole = myRole,
+                        playerRuns = 0,
+                        playerWickets = 0,
+                        aiRuns = 0,
+                        aiWickets = 0,
+                        ballsBowled = 0,
+                        target = null,
+                        commentText = if (multiplayerManager.myPlayerNum == 1) {
+                            "Match Found! You are batting first. Choose your number!"
+                        } else {
+                            "Match Found! You are bowling first. Guess the opponent's number!"
+                        },
+                        recentBalls = emptyList()
+                    )
+                }
+                navigateTo(Screen.PLAY)
+                startCountdownTimer()
+                observeMultiplayerRoom(username)
+            }
         }
     }
 
     fun saveUsernameAndMatch(username: String) {
-        val prefs = getApplication<Application>().getSharedPreferences("hand_cricket_prefs", android.content.Context.MODE_PRIVATE)
-        prefs.edit().putString("username", username).apply()
+        com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
+        
+        // Also save to database if online
+        val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        if (currentUser != null) {
+            val uid = currentUser.uid
+            val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+            database.getReference("users").child(uid).child("username").setValue(username)
+        }
+        
         initiateMatchmaking(username)
     }
 
