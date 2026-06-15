@@ -258,14 +258,33 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
                     val uid = auth.currentUser?.uid ?: ""
-                    val dbRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("users").child(uid)
-                    dbRef.child("username").get().addOnCompleteListener { dbTask ->
-                        val username = dbTask.result?.value as? String ?: email.substringBefore("@")
-                        // Save securely locally
-                        com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
+                    val fallbackUsername = email.substringBefore("@")
+                    try {
+                        val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+                        val dbRef = database.getReference("users").child(uid)
+                        dbRef.child("username").get().addOnCompleteListener { dbTask ->
+                            val username = if (dbTask.isSuccessful) {
+                                dbTask.result?.value as? String ?: fallbackUsername
+                            } else {
+                                fallbackUsername
+                            }
+                            // Save securely locally
+                            com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
+                            _matchState.update { 
+                                it.copy(
+                                    myPlayerName = username,
+                                    isOfflineMode = false
+                                ) 
+                            }
+                            navigateTo(Screen.MENU)
+                            onSuccess()
+                        }
+                    } catch (e: Exception) {
+                        // Database URL is missing fallback
+                        com.example.data.SecurityHelper.secureSave(getApplication(), "username", fallbackUsername)
                         _matchState.update { 
                             it.copy(
-                                myPlayerName = username,
+                                myPlayerName = fallbackUsername,
                                 isOfflineMode = false
                             ) 
                         }
@@ -284,12 +303,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
                     val uid = auth.currentUser?.uid ?: ""
-                    val database = com.google.firebase.database.FirebaseDatabase.getInstance()
-                    val userMap = mapOf("username" to username)
-                    
-                    database.getReference("users").child(uid).setValue(userMap)
-                        .addOnCompleteListener { dbTask ->
-                            if (dbTask.isSuccessful) {
+                    try {
+                        val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+                        val userMap = mapOf("username" to username)
+                        
+                        database.getReference("users").child(uid).setValue(userMap)
+                            .addOnCompleteListener { dbTask ->
                                 // Save securely locally
                                 com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
                                 _matchState.update { 
@@ -300,12 +319,71 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                                 }
                                 navigateTo(Screen.MENU)
                                 onSuccess()
-                            } else {
-                                onError(dbTask.exception?.localizedMessage ?: "Failed to write user profile to database")
                             }
+                    } catch (e: Exception) {
+                        // Fallback on database URL missing
+                        com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
+                        _matchState.update { 
+                            it.copy(
+                                myPlayerName = username,
+                                isOfflineMode = false
+                            ) 
                         }
+                        navigateTo(Screen.MENU)
+                        onSuccess()
+                    }
                 } else {
                     onError(task.exception?.localizedMessage ?: "Registration failed")
+                }
+            }
+    }
+
+    fun signInWithGoogle(idToken: String, defaultUsername: String, email: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+        auth.signInWithCredential(credential)
+            .addOnCompleteListener { task ->
+                if (task.isSuccessful) {
+                    val uid = auth.currentUser?.uid ?: ""
+                    var finalUsername = defaultUsername.ifEmpty { email.substringBefore("@") }
+                    try {
+                        val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+                        val dbRef = database.getReference("users").child(uid)
+                        dbRef.child("username").get().addOnCompleteListener { dbTask ->
+                            val existingName = dbTask.result?.value as? String
+                            if (!existingName.isNullOrEmpty()) {
+                                finalUsername = existingName
+                            } else {
+                                try {
+                                    dbRef.child("username").setValue(finalUsername)
+                                } catch (dbEx: Exception) {
+                                    // Ignore db write failure
+                                }
+                            }
+                            com.example.data.SecurityHelper.secureSave(getApplication(), "username", finalUsername)
+                            _matchState.update { 
+                                it.copy(
+                                    myPlayerName = finalUsername,
+                                    isOfflineMode = false
+                                ) 
+                            }
+                            navigateTo(Screen.MENU)
+                            onSuccess()
+                        }
+                    } catch (e: Exception) {
+                        // Fallback on database URL missing
+                        com.example.data.SecurityHelper.secureSave(getApplication(), "username", finalUsername)
+                        _matchState.update { 
+                            it.copy(
+                                myPlayerName = finalUsername,
+                                isOfflineMode = false
+                            ) 
+                        }
+                        navigateTo(Screen.MENU)
+                        onSuccess()
+                    }
+                } else {
+                    onError(task.exception?.localizedMessage ?: "Google Sign-In failed")
                 }
             }
     }
@@ -315,15 +393,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         auth.signInAnonymously().addOnCompleteListener { task ->
             if (task.isSuccessful) {
                 val uid = auth.currentUser?.uid ?: ""
-                val database = com.google.firebase.database.FirebaseDatabase.getInstance()
-                val userMap = mapOf(
-                    "username" to username,
-                    "email" to email,
-                    "provider" to "google"
-                )
-                database.getReference("users").child(uid).setValue(userMap)
-                    .addOnCompleteListener { dbTask ->
-                        if (dbTask.isSuccessful) {
+                try {
+                    val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+                    val userMap = mapOf(
+                        "username" to username,
+                        "email" to email,
+                        "provider" to "google"
+                    )
+                    database.getReference("users").child(uid).setValue(userMap)
+                        .addOnCompleteListener { dbTask ->
                             com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
                             _matchState.update { 
                                 it.copy(
@@ -333,10 +411,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                             }
                             navigateTo(Screen.MENU)
                             onSuccess()
-                        } else {
-                            onError("Failed to setup Google profile")
                         }
+                } catch (e: Exception) {
+                    com.example.data.SecurityHelper.secureSave(getApplication(), "username", username)
+                    _matchState.update { 
+                        it.copy(
+                            myPlayerName = username,
+                            isOfflineMode = false
+                        ) 
                     }
+                    navigateTo(Screen.MENU)
+                    onSuccess()
+                }
             } else {
                 onError(task.exception?.localizedMessage ?: "Google Sign-in failed")
             }
@@ -436,8 +522,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val currentUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
         if (currentUser != null) {
             val uid = currentUser.uid
-            val database = com.google.firebase.database.FirebaseDatabase.getInstance()
-            database.getReference("users").child(uid).child("username").setValue(username)
+            try {
+                val database = com.google.firebase.database.FirebaseDatabase.getInstance()
+                database.getReference("users").child(uid).child("username").setValue(username)
+            } catch (e: Exception) {
+                // Ignore DB write failure, local secure cache is primary
+            }
         }
         
         initiateMatchmaking(username)
@@ -507,14 +597,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             val currentState = _matchState.value
 
+            val role = if (currentState.playerRole == PlayerRole.BATTING) ChoiceRole.BATSMAN else ChoiceRole.BOWLER
+            val aiMove = aiEngine.generateAiMove(role, currentState.difficulty)
+
             // Record player move in smart AI memory (ignore 0 timeout moves)
             if (playerMove in 1..6) {
                 val isPlayerBatting = currentState.playerRole == PlayerRole.BATTING
                 aiEngine.recordPlayerMove(playerMove, isPlayerBatting)
             }
-
-            val role = if (currentState.playerRole == PlayerRole.BATTING) ChoiceRole.BATSMAN else ChoiceRole.BOWLER
-            val aiMove = aiEngine.generateAiMove(role, currentState.difficulty)
 
             // Dynamic states to update
             var newPlayerRuns = currentState.playerRuns

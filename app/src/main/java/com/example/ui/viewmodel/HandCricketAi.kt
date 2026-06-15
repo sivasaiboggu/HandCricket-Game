@@ -71,9 +71,9 @@ class HandCricketAi {
                 Random.nextInt(1, 7)
             }
             Difficulty.MEDIUM -> {
-                // Professional AI: 60% random, 40% smart prediction using overall move frequencies.
+                // Professional AI: 50% random, 50% smart prediction using overall move frequencies.
                 val randomPercent = Random.nextInt(100)
-                if (randomPercent < 60) {
+                if (randomPercent < 50) {
                     Random.nextInt(1, 7)
                 } else {
                     if (role == ChoiceRole.BOWLER) {
@@ -93,9 +93,9 @@ class HandCricketAi {
                 }
             }
             Difficulty.MASTERY -> {
-                // Genius AI: 12% random, 88% adaptive Markov prediction.
+                // Genius AI: 5% random, 95% adaptive Markov prediction.
                 val randomPercent = Random.nextInt(100)
-                if (randomPercent < 12) {
+                if (randomPercent < 5) {
                     return Random.nextInt(1, 7)
                 }
 
@@ -130,9 +130,34 @@ class HandCricketAi {
                     }
                     
                     val avoidMove = predictedPlayerMove ?: Random.nextInt(1, 7)
-                    // Pick a safe move that is not predicted, prioritizing higher scoring options.
-                    val safeHighRuns = listOf(4, 6, 3, 5, 2, 1).filter { it != avoidMove }
-                    if (safeHighRuns.isNotEmpty()) safeHighRuns.first() else Random.nextInt(1, 7)
+                    // Pick a safe move that is not predicted, using weighted random to avoid predictability.
+                    val safeChoices = (1..6).filter { it != avoidMove }
+                    if (safeChoices.isNotEmpty()) {
+                        val weights = safeChoices.map { move ->
+                            when (move) {
+                                6 -> 6
+                                4 -> 5
+                                5 -> 4
+                                3 -> 4
+                                2 -> 2
+                                1 -> 1
+                                else -> 1
+                            }
+                        }
+                        val totalWeight = weights.sum()
+                        var randomWeight = Random.nextInt(totalWeight)
+                        var selectedMove = safeChoices.first()
+                        for (i in safeChoices.indices) {
+                            randomWeight -= weights[i]
+                            if (randomWeight < 0) {
+                                selectedMove = safeChoices[i]
+                                break
+                            }
+                        }
+                        selectedMove
+                    } else {
+                        Random.nextInt(1, 7)
+                    }
                 }
             }
         }

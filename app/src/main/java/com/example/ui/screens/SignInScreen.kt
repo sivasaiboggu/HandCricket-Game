@@ -28,6 +28,8 @@ import com.example.ui.theme.ImmersiveBackground
 import com.example.ui.theme.ImmersiveBorder
 import com.example.ui.theme.ImmersiveLime
 import com.example.ui.theme.ImmersiveSurface
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.example.ui.viewmodel.GameViewModel
 import com.example.ui.viewmodel.Screen
 
@@ -42,10 +44,7 @@ fun SignInScreen(
     var password by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
 
-    // Google Sign-In helper state
-    var showGoogleDialog by remember { mutableStateOf(false) }
-    var googleNickname by remember { mutableStateOf("") }
-    var googleEmail by remember { mutableStateOf("") }
+
 
     val backgroundBrush = Brush.verticalGradient(
         colors = listOf(ImmersiveBackground, ImmersiveSurface)
@@ -181,9 +180,54 @@ fun SignInScreen(
                 modifier = Modifier.padding(vertical = 4.dp)
             )
 
-            // Google Button (Interactive dialog launcher)
+            // Google OAuth launcher configuration
+            val gso = remember {
+                com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+                    com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
+                )
+                    .requestIdToken(context.getString(com.example.R.string.default_web_client_id))
+                    .requestEmail()
+                    .build()
+            }
+            val googleSignInClient = remember {
+                com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
+            }
+
+            val launcher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.StartActivityForResult()
+            ) { result ->
+                val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                try {
+                    val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                    val idToken = account.idToken
+                    if (idToken != null) {
+                        isLoading = true
+                        viewModel.signInWithGoogle(
+                            idToken = idToken,
+                            defaultUsername = account.displayName ?: "",
+                            email = account.email ?: "",
+                            onSuccess = {
+                                isLoading = false
+                                Toast.makeText(context, "Google Auth Connected!", Toast.LENGTH_SHORT).show()
+                            },
+                            onError = { error ->
+                                isLoading = false
+                                Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                            }
+                        )
+                    } else {
+                        Toast.makeText(context, "Google Sign-In failed: No ID Token", Toast.LENGTH_LONG).show()
+                    }
+                } catch (e: com.google.android.gms.common.api.ApiException) {
+                    Toast.makeText(context, "Google Sign-In failed: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                }
+            }
+
+            // Google Button (OAuth launcher)
             Button(
-                onClick = { showGoogleDialog = true },
+                onClick = {
+                    launcher.launch(googleSignInClient.signInIntent)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),
@@ -244,73 +288,5 @@ fun SignInScreen(
         }
     }
 
-    // Google Sign-In simulated dialog setup
-    if (showGoogleDialog) {
-        AlertDialog(
-            onDismissRequest = { showGoogleDialog = false },
-            title = { Text("Google Account Setup", fontWeight = FontWeight.Bold, color = Color.White) },
-            containerColor = ImmersiveSurface,
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "Simulating Google Play Services Auth connection. Please provide nickname & email to sync profile with database:",
-                        fontSize = 12.sp,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                    OutlinedTextField(
-                        value = googleNickname,
-                        onValueChange = { googleNickname = it },
-                        label = { Text("Athlete Nickname") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        ),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = googleEmail,
-                        onValueChange = { googleEmail = it },
-                        label = { Text("Google Email") },
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
-                        ),
-                        singleLine = true
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (googleNickname.trim().length < 3 || googleEmail.isEmpty()) {
-                            Toast.makeText(context, "Invalid nickname or email", Toast.LENGTH_SHORT).show()
-                            return@Button
-                        }
-                        showGoogleDialog = false
-                        isLoading = true
-                        viewModel.signInWithGoogleSimulated(
-                            username = googleNickname.trim(),
-                            email = googleEmail.trim(),
-                            onSuccess = {
-                                isLoading = false
-                                Toast.makeText(context, "Google Auth Connected!", Toast.LENGTH_SHORT).show()
-                            },
-                            onError = { error ->
-                                isLoading = false
-                                Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
-                            }
-                        )
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = ImmersiveLime)
-                ) {
-                    Text("CONNECT ACCOUNT", color = ImmersiveBackground, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showGoogleDialog = false }) {
-                    Text("CANCEL", color = Color.White)
-                }
-            }
-        )
-    }
+
 }
