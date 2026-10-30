@@ -765,10 +765,12 @@ fun MatchScoreSelectionDialog(
                         textAlign = TextAlign.Center
                     )
                     Text(
-                        text = if (isWin) {
-                            if (state.isMultiplayer) "You won the duel!" else "You beat the computer!"
-                        } else {
-                            if (state.isMultiplayer) "${state.opponentPlayerName} won this duel!" else "The computer outsmarted you this time!"
+                        text = when {
+                            state.winMessage.contains("opponent left", ignoreCase = true) -> "The duel ended because your opponent left."
+                            isWin && state.isMultiplayer -> "You won the duel!"
+                            isWin -> "You beat the computer!"
+                            state.isMultiplayer -> "${state.opponentPlayerName} won this duel!"
+                            else -> "The computer outsmarted you this time!"
                         },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,

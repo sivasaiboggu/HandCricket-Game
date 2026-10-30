@@ -168,6 +168,20 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             multiplayerManager.status.collect { status ->
                 _matchState.update { it.copy(multiplayerStatus = status) }
+                if (status == MultiplayerStatus.OPPONENT_LEFT &&
+                    _matchState.value.isMultiplayer &&
+                    _matchState.value.phase != MatchPhase.COMPLETED
+                ) {
+                    // Opponent disconnected or left: end cleanly without recording stats.
+                    timerJob?.cancel()
+                    _matchState.update {
+                        it.copy(
+                            phase = MatchPhase.COMPLETED,
+                            commentText = "Your opponent left the match.",
+                            winMessage = "Match ended: opponent left"
+                        )
+                    }
+                }
             }
         }
 
@@ -591,7 +605,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun cancelMultiplayerMatchmaking() {
-        multiplayerManager.disconnect()
+        multiplayerManager.cancelSearch()
         navigateTo(Screen.MENU)
     }
 
@@ -1059,6 +1073,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
+        // Close the multiplayer room on natural completion (player 1 owns the write)
+        if (currentState.isMultiplayer && currentState.myPlayerNum == 1) {
+            multiplayerManager.finishRoom()
+        }
+
         // Write statistics inside Room database
         repository.recordCompletedMatch(
             playerRuns = playerRuns,
@@ -1088,7 +1107,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun restartSetup() {
         timerJob?.cancel()
         if (_matchState.value.isMultiplayer) {
-            multiplayerManager.disconnect()
+            multiplayerManager.leaveMatch()
         }
         _matchState.value = MatchState()
         navigateTo(Screen.MENU)

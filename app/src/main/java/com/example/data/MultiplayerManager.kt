@@ -34,9 +34,25 @@ data class OnlineRoom(
     val player2Move: Int = -1,
     val ballsBowled: Int = 0,
     val firstInningsOver: Boolean = false,
-    val currentInnings: Int = 1
+    val currentInnings: Int = 1,
+    val createdAt: Long = 0 // server timestamp; 0 = not yet written
 )
 
+
+/** How long a waiting room stays joinable before it is considered abandoned. */
+const val WAITING_ROOM_TTL_MS = 60_000L
+
+/** True when a waiting room is too old to join safely (its creator likely left). */
+fun isRoomStale(createdAt: Long, now: Long, ttlMs: Long = WAITING_ROOM_TTL_MS): Boolean {
+    // 0 means the server timestamp has not landed yet - treat as fresh, not stale.
+    if (createdAt <= 0L) return false
+    return now - createdAt > ttlMs
+}
+
+/** True when a room can be joined right now. */
+fun isRoomJoinable(room: OnlineRoom, now: Long, ttlMs: Long = WAITING_ROOM_TTL_MS): Boolean {
+    return room.status == "WAITING" && room.player2Id.isEmpty() && !isRoomStale(room.createdAt, now, ttlMs)
+}
 
 class MultiplayerManager private constructor(context: Context) {
 
@@ -127,20 +143,24 @@ class MultiplayerManager private constructor(context: Context) {
     }
 
     private fun findOrCreateRoom(db: FirebaseDatabase, onMatchFound: (OnlineRoom) -> Unit) {
-        val roomsQuery = db.getReference("rooms").orderByChild("status").equalTo("WAITING").limitToFirst(1)
+        val roomsQuery = db.getReference("rooms").orderByChild("status").equalTo("WAITING").limitToFirst(5)
         roomsQuery.addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                if (snapshot.exists()) {
-                    // Match found: Join existing room
-                    val roomSnap = snapshot.children.first()
-                    val room = roomSnap.getValue(OnlineRoom::class.java)
-                    if (room != null) {
-                        joinRoom(db, room.roomId, onMatchFound)
-                    } else {
-                        createNewRoom(db, onMatchFound)
+                val now = System.currentTimeMillis()
+                // Pick the first fresh waiting room; remove abandoned ones so
+                // nobody else gets paired with a ghost.
+                var joinable: OnlineRoom? = null
+                for (roomSnap in snapshot.children) {
+                    val room = roomSnap.getValue(OnlineRoom::class.java) ?: continue
+                    if (isRoomJoinable(room, now)) {
+                        if (joinable == null) joinable = room
+                    } else if (room.status == "WAITING" && isRoomStale(room.createdAt, now)) {
+                        roomSnap.ref.removeValue()
                     }
+                }
+                if (joinable != null) {
+                    joinRoom(db, joinable.roomId, onMatchFound)
                 } else {
-                    // No waiting room: Create a new room
                     createNewRoom(db, onMatchFound)
                 }
             }
@@ -166,6 +186,10 @@ class MultiplayerManager private constructor(context: Context) {
 
         roomRef.setValue(newRoom).addOnCompleteListener { task ->
             if (task.isSuccessful) {
+                roomRef.child("createdAt").setValue(ServerValue.TIMESTAMP)
+                // If this client vanishes mid-search, mark the room abandoned so
+                // future players skip it instead of hanging.
+                roomRef.onDisconnect().updateChildren(mapOf("status" to "ABANDONED"))
                 listenToRoom(roomRef, onMatchFound)
             } else {
                 _status.value = MultiplayerStatus.ERROR
@@ -181,20 +205,20 @@ class MultiplayerManager private constructor(context: Context) {
         ref.runTransaction(object : Transaction.Handler {
             override fun doTransaction(mutableData: MutableData): Transaction.Result {
                 val room = mutableData.getValue(OnlineRoom::class.java) ?: return Transaction.success(mutableData)
-                if (room.status == "WAITING" && room.player2Id.isEmpty()) {
+                if (isRoomJoinable(room, System.currentTimeMillis())) {
                     mutableData.child("player2Id").value = myUid
                     mutableData.child("player2Name").value = myUsername
                     mutableData.child("status").value = "PLAYING"
                     return Transaction.success(mutableData)
                 }
                 return Transaction.abort()
-
             }
 
             override fun onComplete(error: DatabaseError?, committed: Boolean, snapshot: DataSnapshot?) {
                 if (committed && snapshot != null) {
                     val room = snapshot.getValue(OnlineRoom::class.java)
                     if (room != null) {
+                        ref.onDisconnect().updateChildren(mapOf("status" to "ABANDONED"))
                         listenToRoom(ref, onMatchFound)
                     } else {
                         createNewRoom(db, onMatchFound)
@@ -213,6 +237,10 @@ class MultiplayerManager private constructor(context: Context) {
                 val room = snapshot.getValue(OnlineRoom::class.java)
                 if (room != null) {
                     _roomData.value = room
+                    if (room.status == "ABANDONED" && _status.value == MultiplayerStatus.CONNECTED) {
+                        _status.value = MultiplayerStatus.OPPONENT_LEFT
+                        return
+                    }
                     if (room.status == "PLAYING" && _status.value != MultiplayerStatus.CONNECTED) {
                         _status.value = MultiplayerStatus.CONNECTED
                         isSearching = false
@@ -255,8 +283,34 @@ class MultiplayerManager private constructor(context: Context) {
         ref.updateChildren(updates)
     }
 
+    /** Leaving mid-match: tell the opponent immediately instead of letting them wait. */
+    fun leaveMatch() {
+        val ref = roomRef
+        if (ref != null) {
+            ref.onDisconnect().cancel()
+            ref.child("status").setValue("ABANDONED")
+        }
+        disconnect()
+    }
+
+    /** Cancelling matchmaking: delete my own still-waiting room so nobody joins a ghost. */
+    fun cancelSearch() {
+        val ref = roomRef
+        if (ref != null && myPlayerNum == 1) {
+            ref.onDisconnect().cancel()
+            ref.removeValue()
+        }
+        disconnect()
+    }
+
+    /** Natural match end: close the room. */
+    fun finishRoom() {
+        roomRef?.child("status")?.setValue("FINISHED")
+    }
+
     fun disconnect() {
         roomListener?.let { roomRef?.removeEventListener(it) }
+        roomRef?.onDisconnect()?.cancel()
         roomRef = null
         roomListener = null
         _roomData.value = null
