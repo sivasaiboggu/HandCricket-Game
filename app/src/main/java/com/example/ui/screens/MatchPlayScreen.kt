@@ -456,12 +456,7 @@ fun TimerProgressBar(secondsRemaining: Int) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "CHOOSE FINGERS GESTURE",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White.copy(alpha = 0.5f)
-            )
+            Spacer(modifier = Modifier.weight(1f))
             Text(
                 text = "${secondsRemaining}s remaining",
                 fontSize = 12.sp,

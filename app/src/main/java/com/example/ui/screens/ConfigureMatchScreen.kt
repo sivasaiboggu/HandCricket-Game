@@ -107,7 +107,7 @@ fun ConfigureMatchScreen(
                     }
 
                     // 2. Wickets Selector
-                    OptionCard(title = "Total Wickets (Outs limit)") {
+                    OptionCard(title = "Wickets (outs per innings)") {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -158,9 +158,9 @@ fun ConfigureMatchScreen(
                                         )
                                         Text(
                                             text = when (diff) {
-                                                Difficulty.EASY -> "Picks numbers general random. Excellent for fresh entries."
+                                                Difficulty.EASY -> "Picks numbers at random. Perfect for your first matches."
                                                 Difficulty.MEDIUM -> "Observes overall patterns and restricts easy scoring runs."
-                                                Difficulty.MASTERY -> "Traces previous finger moves, predictions sequence, and counters you directly!"
+                                                Difficulty.MASTERY -> "Traces your previous moves, predicts sequences, and counters you directly."
                                             },
                                             fontSize = 11.sp,
                                             color = Color.White.copy(alpha = 0.6f)

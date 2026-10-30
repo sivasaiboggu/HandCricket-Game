@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import com.example.BuildConfig
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -118,7 +119,7 @@ fun MainMenuScreen(
                 .fillMaxSize()
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             // 1. App Title Canopy
             Column(
@@ -213,6 +214,8 @@ fun MainMenuScreen(
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.weight(1f))
 
             // 3. Central Actions Button Clusters
             Column(
@@ -342,7 +345,7 @@ fun MainMenuScreen(
 
             // 4. Footnote Sign
             Text(
-                text = "Cricket Mastery Edition v1.1",
+                text = "Cricket Mastery Edition v${BuildConfig.VERSION_NAME}",
                 fontSize = 10.sp,
                 color = Color.White.copy(alpha = 0.3f),
                 modifier = Modifier.padding(bottom = 12.dp)

@@ -110,7 +110,7 @@ fun TossCoinFlipper(
             val letter = if (isSpinning) {
                 if ((spinAngle / 90).toInt() % 2 == 0) "H" else "T"
             } else {
-                if (result == "HEADS") "H" else if (result == "TAILS") "T" else ""
+                if (result == "HEADS") "H" else if (result == "TAILS") "T" else "?"
             }
 
             if (letter.isNotEmpty()) {
@@ -130,7 +130,7 @@ fun TossCoinFlipper(
                 }
             }
 
-            if (!isSpinning && result.isNotEmpty()) {
+            if (!isSpinning) {
                 val textColor = Color.White
                 // Draw inner circle decoration
                 drawOval(
