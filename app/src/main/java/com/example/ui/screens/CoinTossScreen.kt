@@ -76,7 +76,7 @@ fun CoinTossScreen(
             ) {
                 // Header Subtitle
                 Text(
-                    text = "WIN THE TOSS TO DESIGNATE ROLES",
+                    text = "WIN THE TOSS, CHOOSE YOUR ROLE",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = ImmersiveLime,
@@ -144,7 +144,7 @@ fun CoinTossScreen(
                         }
                     } else if (isSpinning) {
                         Text(
-                            text = "Spinning metallic token... Call is $playerChoice",
+                            text = "Flipping the coin... You called $playerChoice",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White,
@@ -164,7 +164,7 @@ fun CoinTossScreen(
                         if (winner == "PLAYER") {
                             // Player Won! Choice
                             Text(
-                                text = "Congratulations! You won the toss.\nSelect your opening match role:",
+                                text = "You won the toss! Choose to bat or bowl first:",
                                 fontSize = 15.sp,
                                 color = Color.White,
                                 textAlign = TextAlign.Center,

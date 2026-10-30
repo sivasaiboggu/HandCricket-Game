@@ -67,7 +67,7 @@ fun MatchPlayScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Active Pitch Duel", fontWeight = FontWeight.Black, color = Color.White) },
+                title = { Text("Live Match", fontWeight = FontWeight.Black, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBackToMenu, modifier = Modifier.testTag("play_back_button")) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Menu", tint = Color.White)
@@ -669,7 +669,7 @@ fun FingerDecisionDeck(
 
     Column {
         Text(
-            text = "TAP TO SHOW RUN FINGERS",
+            text = "TAP YOUR NUMBER",
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             color = Color.White.copy(alpha = 0.4f),
@@ -765,7 +765,11 @@ fun MatchScoreSelectionDialog(
                         textAlign = TextAlign.Center
                     )
                     Text(
-                        text = if (isWin) "You defeated the AI Defender!" else "The AI Defender outsmarted you!",
+                        text = if (isWin) {
+                            if (state.isMultiplayer) "You won the duel!" else "You beat the computer!"
+                        } else {
+                            if (state.isMultiplayer) "${state.opponentPlayerName} won this duel!" else "The computer outsmarted you this time!"
+                        },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White.copy(alpha = 0.6f),
@@ -857,7 +861,7 @@ fun MatchScoreSelectionDialog(
                                         modifier = Modifier.padding(10.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally
                                     ) {
-                                        Text("AI DEFENDER", fontSize = 10.sp, color = Color(0xFF81D4FA), fontWeight = FontWeight.Black)
+                                        Text("COMPUTER", fontSize = 10.sp, color = Color(0xFF81D4FA), fontWeight = FontWeight.Black)
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
                                             text = "${state.aiRuns} / ${state.aiWickets}",

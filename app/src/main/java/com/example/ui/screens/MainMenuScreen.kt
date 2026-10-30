@@ -135,7 +135,7 @@ fun MainMenuScreen(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "PORTRAIT MASTER DUELS",
+                    text = "OUTSMART. OUTSCORE. WIN.",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = ImmersiveLime,
@@ -167,7 +167,7 @@ fun MainMenuScreen(
                                 color = if (state.isOfflineMode) Color.Gray else ImmersiveLime
                             )
                             Text(
-                                text = "Rank Star / Lvl ${stats.level}",
+                                text = "Level ${stats.level}",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Black,
                                 color = Color.White
@@ -204,13 +204,41 @@ fun MainMenuScreen(
                             .height(6.dp)
                             .clip(RoundedCornerShape(3.dp)),
                         color = ImmersiveLime,
-                        trackColor = ImmersiveBorder
+                        trackColor = ImmersiveBorder,
+                        drawStopIndicator = {}
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "${stats.runsScored} Runs • ${stats.matchesWon} Wins",
                         fontSize = 11.sp,
                         color = Color.White.copy(alpha = 0.5f)
+                    )
+                }
+            }
+
+            // 3. Rotating strategy tip (fills the hero gap with real game guidance)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = ImmersiveSurface.copy(alpha = 0.6f)),
+                border = BorderStroke(1.dp, ImmersiveLime.copy(alpha = 0.35f)),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "PRO TIP",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        color = ImmersiveLime,
+                        letterSpacing = 2.sp,
+                        modifier = Modifier.padding(end = 12.dp)
+                    )
+                    Text(
+                        text = "Vary your numbers every ball. The Genius AI learns your patterns and counters repeats.",
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.75f)
                     )
                 }
             }
@@ -240,7 +268,7 @@ fun MainMenuScreen(
                         Icon(Icons.Default.PlayArrow, contentDescription = "Play", modifier = Modifier.size(28.dp), tint = ImmersiveBackground)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "START PLAY DUEL",
+                            text = "PLAY VS COMPUTER",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Black,
                             color = ImmersiveBackground
@@ -277,7 +305,7 @@ fun MainMenuScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (state.isOfflineMode) "MULTIPLAYER LOCKED" else "START MULTIPLAYER DUEL",
+                            text = if (state.isOfflineMode) "MULTIPLAYER LOCKED" else "PLAY ONLINE",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Black,
                             color = if (state.isOfflineMode) Color.Gray else Color.White

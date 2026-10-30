@@ -78,7 +78,7 @@ data class MatchState(
     val multiplayerStatus: MultiplayerStatus = MultiplayerStatus.UNINITIALIZED,
     val roomId: String = "",
     val myPlayerName: String = "YOU",
-    val opponentPlayerName: String = "AI DEFENDER",
+    val opponentPlayerName: String = "COMPUTER",
     val isOfflineMode: Boolean = false
 )
 
@@ -1036,10 +1036,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         finalSixes: Int
     ) {
         val difficultyStr = currentState.difficulty.name
-        val winText = if (playerWon) {
-            "Match Completed: Victory! You successfully defeated AI Master!"
-        } else {
-            "Match Completed: Defeat! Better luck next time!"
+        val winText = when {
+            playerWon && currentState.isMultiplayer -> "Match over: Victory! You won the duel!"
+            playerWon -> "Match over: Victory! You beat the computer!"
+            currentState.isMultiplayer -> "Match over: Defeat! ${currentState.opponentPlayerName} takes this one."
+            else -> "Match over: Defeat! Better luck next time!"
         }
 
         val xpGainedValue = if (playerWon) 150 else 45
@@ -1053,7 +1054,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 aiRuns = aiRuns,
                 aiWickets = aiWickets,
                 winMessage = winText,
-                commentText = "Game Over! Congratulations on completing the tournament.",
+                commentText = "Game over. Thanks for playing!",
                 xpGained = finalXp
             )
         }

@@ -75,7 +75,7 @@ fun ConfigureMatchScreen(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(
-                        text = "CUSTOMIZE YOUR DUEL",
+                        text = "SET UP YOUR MATCH",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = ImmersiveLime,
@@ -83,7 +83,7 @@ fun ConfigureMatchScreen(
                     )
 
                     // 1. Overs Selector
-                    OptionCard(title = "Innings Length (Overs)") {
+                    OptionCard(title = "Match length (overs)") {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier.fillMaxWidth()
@@ -131,7 +131,7 @@ fun ConfigureMatchScreen(
                     }
 
                     // 3. Difficulty Selector
-                    OptionCard(title = "AI Defending Tactics") {
+                    OptionCard(title = "Choose your opponent") {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Difficulty.values().forEach { diff ->
                                 val isSelected = selectedDifficulty == diff
@@ -149,8 +149,8 @@ fun ConfigureMatchScreen(
                                         Text(
                                             text = when (diff) {
                                                 Difficulty.EASY -> "Rookie AI"
-                                                Difficulty.MEDIUM -> "Professional Bowler"
-                                                Difficulty.MASTERY -> "GENIUS MASTERY AI (Markov Predictions)"
+                                                Difficulty.MEDIUM -> "Pro AI"
+                                                Difficulty.MASTERY -> "Genius AI"
                                             },
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Black,
@@ -159,7 +159,7 @@ fun ConfigureMatchScreen(
                                         Text(
                                             text = when (diff) {
                                                 Difficulty.EASY -> "Picks numbers at random. Perfect for your first matches."
-                                                Difficulty.MEDIUM -> "Observes overall patterns and restricts easy scoring runs."
+                                                Difficulty.MEDIUM -> "Learns which numbers you repeat and plays to counter them."
                                                 Difficulty.MASTERY -> "Traces your previous moves, predicts sequences, and counters you directly."
                                             },
                                             fontSize = 11.sp,

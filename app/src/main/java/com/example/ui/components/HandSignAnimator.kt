@@ -250,7 +250,7 @@ fun HandSignAnimator(
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
-                        text = "AI DEFENDER",
+                        text = "COMPUTER",
                         color = Color(0xFF81D4FA),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Black,
@@ -381,10 +381,10 @@ private fun DrawScope.drawHandGesture(
     handColor: Color,
     isLeftHand: Boolean
 ) {
-    val basePalmWidth = 46f * scale
-    val basePalmHeight = 56f * scale
-    val fingerThickness = 9f * scale
-    val baseFingerLength = 48f * scale
+    val basePalmWidth = 74f * scale
+    val basePalmHeight = 90f * scale
+    val fingerThickness = 14f * scale
+    val baseFingerLength = 77f * scale
 
     // 1. Draw Wrist/Forearm base (slanted rectangle)
     val wristPath = androidx.compose.ui.graphics.Path().apply {
