@@ -7,6 +7,7 @@ plugins {
   alias(libs.plugins.google.services)
 }
 
+import java.util.Properties
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
@@ -23,17 +24,16 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD") ?: "android"
-      keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
-      keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
-    }
-    create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
+      // Signing material comes from environment variables or a local,
+      // gitignored keystore.properties - never from files in this repository.
+      val props = Properties()
+      val propsFile = rootProject.file("keystore.properties")
+      if (propsFile.exists()) propsFile.inputStream().use { props.load(it) }
+      fun cfg(env: String, key: String): String? = System.getenv(env) ?: props.getProperty(key)
+      storeFile = cfg("KEYSTORE_PATH", "storeFile")?.let { file(it) }
+      storePassword = cfg("STORE_PASSWORD", "storePassword")
+      keyAlias = cfg("KEY_ALIAS", "keyAlias")
+      keyPassword = cfg("KEY_PASSWORD", "keyPassword")
     }
   }
 
@@ -46,7 +46,6 @@ android {
       signingConfig = signingConfigs.getByName("release")
     }
     debug {
-      signingConfig = signingConfigs.getByName("debugConfig")
     }
   }
   compileOptions {

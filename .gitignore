@@ -20,3 +20,8 @@ debug.keystore
 # Firebase configurations
 /app/google-services.json
 /app/google-services*.json
+# Signing material - never commit
+*.jks
+*.keystore
+debug.keystore.base64
+keystore.properties
