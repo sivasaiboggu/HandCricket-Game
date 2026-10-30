@@ -83,6 +83,30 @@ data class MatchState(
 )
 
 
+/** Outcome of one multiplayer ball, derived purely from both submitted moves. */
+data class MpBallOutcome(
+    val isOut: Boolean,
+    val runs: Int,
+    val isSixForMe: Boolean,
+    val isDotForMe: Boolean
+)
+
+/**
+ * Classify a multiplayer ball. Player 1 bats in innings 1, player 2 in innings 2.
+ * A move of 0 means the player timed out; matching timeouts are a dot ball, not a wicket.
+ * Personal stats are credited only for my own batting sixes and my own bowled dots.
+ */
+fun classifyMultiplayerBall(p1Move: Int, p2Move: Int, currentInnings: Int, myRole: PlayerRole): MpBallOutcome {
+    val isOut = p1Move == p2Move && p1Move != 0
+    val runs = if (currentInnings == 1) p1Move else p2Move
+    return MpBallOutcome(
+        isOut = isOut,
+        runs = runs,
+        isSixForMe = !isOut && runs == 6 && myRole == PlayerRole.BATTING,
+        isDotForMe = !isOut && runs == 0 && myRole == PlayerRole.BOWLING
+    )
+}
+
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: GameRepository
@@ -589,7 +613,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
                 if (isResolvingMpBall) return@collect
 
-                if (room.player1Move > 0 && room.player2Move > 0) {
+                if (room.player1Move >= 0 && room.player2Move >= 0) {
                     if (room.ballsBowled > lastProcessedBall) {
                         lastProcessedBall = room.ballsBowled
                         isResolvingMpBall = true
@@ -601,10 +625,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
 
+    private var isResolvingBall = false
+
     // Play Ball action
     fun playBall(playerMove: Int) {
         if (_matchState.value.phase == MatchPhase.COMPLETED) return
-        
+
         // Cancel timer immediately
         timerJob?.cancel()
 
@@ -616,7 +642,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
+        // Guard against double resolution (e.g. countdown expiring at the same
+        // instant the player taps a number): one ball must resolve exactly once.
+        if (isResolvingBall) return
+        isResolvingBall = true
+
         viewModelScope.launch {
+          try {
             // Put game into shaking phase first
             _matchState.update {
                 it.copy(
@@ -805,6 +837,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             startCountdownTimer()
+          } finally {
+            isResolvingBall = false
+          }
         }
     }
 
@@ -836,8 +871,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             var dotBallsThisBall = 0
             var sixesHitThisBall = 0
 
-            val isOut = p1Move == p2Move
-            val runsVal = if (currentState.currentInnings == 1) p1Move else p2Move
+            val outcome = classifyMultiplayerBall(p1Move, p2Move, currentState.currentInnings, currentState.playerRole)
+            val isOut = outcome.isOut
+            val runsVal = outcome.runs
             
             var commentary = ""
 
@@ -861,8 +897,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     if (runsVal == 0) "Timeout! Opponent batsman scored 0!" else generateBowlingCommentary(runsVal)
                 }
 
-                if (runsVal == 6) sixesHitThisBall++
-                if (runsVal == 0) dotBallsThisBall++
+                if (outcome.isSixForMe) sixesHitThisBall++
+                if (outcome.isDotForMe) dotBallsThisBall++
             }
 
             // Timeline result chip

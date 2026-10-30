@@ -29,8 +29,9 @@ data class OnlineRoom(
     val player2Id: String = "",
     val player2Name: String = "",
     val status: String = "WAITING", // WAITING, PLAYING, FINISHED
-    val player1Move: Int = 0,
-    val player2Move: Int = 0,
+    // -1 = not yet submitted this ball; 0 = submitted timeout; 1-6 = played move
+    val player1Move: Int = -1,
+    val player2Move: Int = -1,
     val ballsBowled: Int = 0,
     val firstInningsOver: Boolean = false,
     val currentInnings: Int = 1
@@ -236,8 +237,8 @@ class MultiplayerManager private constructor(context: Context) {
     fun resetRoomMoves(nextBallsCount: Int) {
         val ref = roomRef ?: return
         val updates = mapOf(
-            "player1Move" to 0,
-            "player2Move" to 0,
+            "player1Move" to -1,
+            "player2Move" to -1,
             "ballsBowled" to nextBallsCount
         )
         ref.updateChildren(updates)
@@ -246,8 +247,8 @@ class MultiplayerManager private constructor(context: Context) {
     fun updateInningsTransition(newRolePath1: PlayerRole, newRolePath2: PlayerRole) {
         val ref = roomRef ?: return
         val updates = mapOf(
-            "player1Move" to 0,
-            "player2Move" to 0,
+            "player1Move" to -1,
+            "player2Move" to -1,
             "ballsBowled" to 0,
             "currentInnings" to 2
         )
